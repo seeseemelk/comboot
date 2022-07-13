@@ -1,4 +1,0 @@
-option nodefaultlibs
-option offset=0x10000
-name bin/comboot_stage2.bin
-format raw
