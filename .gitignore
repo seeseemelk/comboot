@@ -1,3 +1,10 @@
-bin/
-comboot.img
+# Editors
+.idea
 .vscode
+
+# Ignore Gradle project-specific cache directory
+.gradle
+
+# Ignore output directories
+build
+bin

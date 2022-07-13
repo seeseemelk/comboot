@@ -69,9 +69,9 @@ packet_start:
 ; Ends a packet
 packet_end:
 	mov al, byte [var_packet_c0]
-	call packet_send_byte
+	call packet_send_byte_raw
 	mov al, byte [var_packet_c1]
-	call packet_send_byte
+	call packet_send_byte_raw
 	ret
 
 ; Sends packet data.
@@ -89,10 +89,12 @@ packet_send_data:
 	ret
 
 ; Sends a byte over uart.
+; Use packet_send_byte_raw to send a byte without updating checksums.
 ; Parameters:
 ;  al = The byte to send.
 packet_send_byte:
 	call packet_checksum_update
+packet_send_byte_raw:
 	push ax
 	push dx
 	mov ah, 0x01
