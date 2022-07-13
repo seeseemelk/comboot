@@ -1,43 +1,36 @@
 NASM := nasm
-SRC_DIR := src
-BIN_DIR := bin
-IMAGE := $(BIN_DIR)/comboot.img
 
-CREATE_DIRS := $(BIN_DIR)/.create
-SRC_C := $(wildcard $(SRC_DIR)/*.c)
-OBJ_C := $(SRC_C:$(SRC_DIR)/%.c=$(BIN_DIR)/%.o)
-DEP_C := $(SRC_C:$(SRC_DIR)/%.c=$(BIN_DIR)/%.d)
-COMBOOT_STAGE2 = $(BIN_DIR)/comboot_stage2.bin
+SRC := src/main/asm
+BIN := bin/asm
+IMAGE := $(BIN)/comboot.img
+STAGE1 := $(BIN)/stage1.bin
+STAGE2 := $(BIN)/stage2.bin
 
-COMMONFLAGS =
-CFLAGS = $(COMMONFLAGS) -0 -we -zl -s -ms
-LDFLAGS = $(COMMONFLAGS)
-CC = wcc
-LD = wlink
+FLAGS := -w+error -g -I$(SRC) -I$(BIN)
 
 .PHONY: all
 all: $(IMAGE)
 
 .PHONY: clean
 clean:
-	rm -rf $(BIN_DIR)
+	rm -rf $(BIN)
 
 .PHONY: emulate
 emulate: $(IMAGE)
-	qemu-system-i386 -drive file=$(IMAGE),if=floppy,format=raw -serial stdio
+	qemu-system-i386 -drive file=$(IMAGE),if=floppy,format=raw -serial tcp::4444,server
 
-$(IMAGE): $(SRC_DIR)/boot.asm $(COMBOOT_STAGE2) $(CREATE_DIRS)
-	nasm -fbin -w+error -g -o $(@:$(SRC_DIR)/%=$(BIN_DIR)/%) -MD $(<:$(SRC_DIR)/%=$(BIN_DIR)/%).d $<
 
-$(COMBOOT_STAGE2): linker.lnk $(OBJ_C)
-	$(LD) file bin/test.o @linker.lnk
+$(IMAGE): $(STAGE1) $(STAGE2)
+	cp $(STAGE1) $(IMAGE)
 
-$(BIN_DIR)/%.o: $(SRC_DIR)/%.c $(CREATE_DIRS)
-	$(CC) $(CFLAGS) -ad=$(@:%.o=%.d) -add=$< -adt=$@ -fo=$@ $<
+$(STAGE1): $(STAGE2)
 
-%/.create:
+$(BIN)/%.bin: $(SRC)/%.asm $(BIN)/.mkdir
+	nasm -fbin $(FLAGS) -o $@ -MD $@.d $<
+
+$(BIN)/.mkdir:
 	mkdir -p $(dir $@)
 	touch $@
 
--include $(BIN_DIR)/boot.asm.d
--include $(DEP_C)
+-include $(BIN)/stage1.asm.d
+-include $(BIN)/stage2.asm.d

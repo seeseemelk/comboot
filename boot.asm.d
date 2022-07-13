@@ -1,2 +1,0 @@
-comboot.img : boot.asm
-
