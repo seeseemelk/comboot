@@ -33,9 +33,9 @@ start:
 	xor bx, bx
 	mov es, bx
 	mov ax, [es:const_int13_ip]
-	mov [var_int13_ip], ax
+	mov [cs:var_int13_ip], ax
 	mov ax, [es:const_int13_cs]
-	mov [var_int13_cs], ax
+	mov [cs:var_int13_cs], ax
 ; Write new int13 handler
 	mov ax, irq_13
 	mov [es:const_int13_ip], ax
@@ -69,8 +69,8 @@ var_int13_cs dw 0
 ;  cl = The number of bytes to send.
 packet_start:
 ; Reset checksum
-	mov byte [var_packet_c0], 0
-	mov byte [var_packet_c1], 0
+	mov byte [cs:var_packet_c0], 0
+	mov byte [cs:var_packet_c1], 0
 ; Send packet type
 	call packet_send_byte
 ; Send packet length
@@ -80,9 +80,9 @@ packet_start:
 
 ; Ends a packet
 packet_end:
-	mov al, byte [var_packet_c0]
+	mov al, byte [cs:var_packet_c0]
 	call packet_send_byte_raw
-	mov al, byte [var_packet_c1]
+	mov al, byte [cs:var_packet_c1]
 	call packet_send_byte_raw
 	ret
 
@@ -122,13 +122,13 @@ packet_send_byte_raw:
 packet_checksum_update:
 	push ax
 ; Update C0
-	mov ah, byte [var_packet_c0]
+	mov ah, byte [cs:var_packet_c0]
 	add ah, al
 	adc ah, 0
-	mov byte [var_packet_c0], ah
+	mov byte [cs:var_packet_c0], ah
 ; Update C1
-	add byte [var_packet_c1], ah
-	adc byte [var_packet_c1], 0
+	add byte [cs:var_packet_c1], ah
+	adc byte [cs:var_packet_c1], 0
 	pop ax
 	ret
 
@@ -284,25 +284,26 @@ irq_13:
 	call packet_start
 ; Send the packet body
 ; Drive
-	mov al, [var_int13_drive]
+	mov al, [cs:var_int13_drive]
 	call packet_send_byte
 ; Sector count
-	mov al, [var_int13_sector_count]
+	mov al, [cs:var_int13_sector_count]
 	call packet_send_byte
 ; Cylinder (low)
-	mov ax, [var_int13_cylinder]
+	mov ax, [cs:var_int13_cylinder]
 	call packet_send_byte
 ; Cylinder (high)
 	mov al, ah
 	call packet_send_byte
 ; Sector
-	mov al, [var_int13_sector]
+	mov al, [cs:var_int13_sector]
 	call packet_send_byte
 ; Head
-	mov al, [var_int13_head]
+	mov al, [cs:var_int13_head]
 	call packet_send_byte
 ; Send the packet trailer
 	call packet_end
+	jmp $
 	iret
 
 var_int13_sector_count db 0
