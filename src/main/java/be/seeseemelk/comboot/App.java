@@ -5,47 +5,99 @@ package be.seeseemelk.comboot;
 
 import be.seeseemelk.comboot.connectors.Connector;
 import be.seeseemelk.comboot.connectors.TCPConnector;
-import be.seeseemelk.comboot.packets.ComHello;
-import be.seeseemelk.comboot.packets.ComPacket;
-import be.seeseemelk.comboot.packets.ComRead;
-import lombok.AllArgsConstructor;
+import be.seeseemelk.comboot.packets.*;
+import lombok.RequiredArgsConstructor;
 
 import java.io.IOException;
+import java.nio.channels.SeekableByteChannel;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 
-@AllArgsConstructor
-public class App
+@RequiredArgsConstructor
+public class App implements AutoCloseable
 {
     private final Connector connector;
+    private SeekableByteChannel channel;
 
-    private void run() throws IOException
+    public void run() throws IOException
     {
-        for (;;)
+        channel = Files.newByteChannel(Paths.get("disk1.img"), StandardOpenOption.READ);
+        while (connector.isConnected())
         {
-            ComPacket packet = connector.read();
-            System.out.format("Received packet: %s%n", packet);
-            switch (packet.getType())
+            try
             {
-                case HELLO -> handleHello((ComHello) packet);
-                case READ -> handleRead((ComRead) packet);
+                ComPacket packet = connector.read();
+                System.out.format("Received packet: %s%n", packet);
+                switch (packet.getType())
+                {
+                    case HELLO -> handleHello((ComHello) packet);
+                    case READ -> handleRead((ComRead) packet);
+                }
+            }
+            catch (ComBootException e)
+            {
+                e.printStackTrace();
             }
         }
     }
 
-    private void handleHello(ComHello packet)
+    private void handleHello(ComHello packet) throws IOException
     {
         System.out.println("Received hello");
+        ComWelcome welcome = new ComWelcome();
+        connector.write(welcome);
+        System.out.println("Sent welcome");
     }
 
     private void handleRead(ComRead packet)
     {
+        ComData data = new ComData();
+        //data.
         System.out.println("Received read");
     }
 
-    public static void main(String[] args) throws IOException
+    @Override
+    public void close() throws Exception
     {
-        try (TCPConnector connector = new TCPConnector("localhost", 4444))
+        if (channel != null)
         {
-            new App(connector).run();
+            channel.close();
+            channel = null;
+        }
+    }
+
+    public static void main(String[] args) throws Exception
+    {
+        try (
+            TCPConnector connector = connect();
+            App app = new App(connector);
+        )
+        {
+            app.run();
         }
     };
+
+    private static TCPConnector connect() throws IOException
+    {
+        try
+        {
+            for (;;)
+            {
+                try
+                {
+                    return new TCPConnector("localhost", 4444);
+                }
+                catch (IOException e)
+                {
+                    e.printStackTrace();
+                    Thread.sleep(500L);
+                }
+            }
+        }
+        catch (InterruptedException e)
+        {
+            throw new IOException(e);
+        }
+    }
 }

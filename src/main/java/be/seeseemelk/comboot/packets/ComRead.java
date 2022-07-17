@@ -1,5 +1,6 @@
 package be.seeseemelk.comboot.packets;
 
+import be.seeseemelk.comboot.Buffer;
 import lombok.Data;
 
 @Data

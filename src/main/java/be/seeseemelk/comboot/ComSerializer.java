@@ -1,5 +1,9 @@
-package be.seeseemelk.comboot.packets;
+package be.seeseemelk.comboot;
 
+import be.seeseemelk.comboot.Buffer;
+import be.seeseemelk.comboot.packets.ComHello;
+import be.seeseemelk.comboot.packets.ComPacket;
+import be.seeseemelk.comboot.packets.ComRead;
 import lombok.experimental.UtilityClass;
 
 @UtilityClass
@@ -32,17 +36,17 @@ public class ComSerializer
 			packet = new ComRead();
 			break;
 		default:
-			throw new RuntimeException(String.format("Invalid ComPacket type: %d", type));
+			throw new ComBootException(String.format("Invalid ComPacket type: %d", type), buffer, null);
 		}
 		int length = buffer.getByte(1);
 		if (length == buffer.skipLast(2).getLength())
-			throw new RuntimeException("Buffer badly sized");
+			throw new ComBootException("Buffer badly sized", buffer, packet);
 		packet.readFrom(buffer.slicePos(2, buffer.getLength() - 2));
 
 		int expectedChecksum = calculateChecksum(buffer.skipLast(2));
 		int actualChecksum = buffer.getShort(buffer.getLength() - 2);
 		if (expectedChecksum != actualChecksum)
-			throw new RuntimeException("Incorrect checksum");
+			throw new ComBootException("Incorrect checksum", buffer, packet);
 
 		return packet;
 	}

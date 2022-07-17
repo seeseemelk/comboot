@@ -3,29 +3,34 @@ package be.seeseemelk.comboot.packets;
 import be.seeseemelk.comboot.Buffer;
 import lombok.Data;
 
+import java.util.Arrays;
+
 @Data
-public class ComHello implements ComPacket
+public class ComData implements ComPacket
 {
+	private byte[] data;
 
 	@Override
 	public ComType getType()
 	{
-		return ComType.HELLO;
+		return ComType.DATA;
 	}
 
 	@Override
 	public int getLength()
 	{
-		return 0;
+		return data.length;
 	}
 
 	@Override
 	public void writeTo(Buffer buffer)
 	{
+		buffer.setBytes(0, data);
 	}
 
 	@Override
 	public void readFrom(Buffer buffer)
 	{
+		data = Arrays.copyOf(buffer.array(), buffer.getLength());
 	}
 }

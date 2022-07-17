@@ -8,3 +8,6 @@
 # Ignore output directories
 build
 bin
+
+# DIsk images
+*.img

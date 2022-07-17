@@ -1,6 +1,6 @@
 package be.seeseemelk.comboot.packets;
 
-import java.nio.ByteBuffer;
+import be.seeseemelk.comboot.Buffer;
 
 public interface ComPacket
 {

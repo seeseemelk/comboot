@@ -4,13 +4,13 @@ import be.seeseemelk.comboot.Buffer;
 import lombok.Data;
 
 @Data
-public class ComHello implements ComPacket
+public class ComWelcome implements ComPacket
 {
 
 	@Override
 	public ComType getType()
 	{
-		return ComType.HELLO;
+		return ComType.WELCOME;
 	}
 
 	@Override

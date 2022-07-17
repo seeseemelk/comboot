@@ -7,7 +7,9 @@ import lombok.RequiredArgsConstructor;
 public enum ComType
 {
 	HELLO(1),
-	READ(2),
+	WELCOME(2),
+	READ(3),
+	DATA(4),
 	;
 
 	@Getter

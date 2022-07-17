@@ -1,9 +1,14 @@
-package be.seeseemelk.comboot.packets;
+package be.seeseemelk.comboot;
 
 import java.nio.ByteBuffer;
+import java.util.HexFormat;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class Buffer
 {
+	private static final HexFormat FORMAT = HexFormat.of();
+
 	private final ByteBuffer buffer;
 
 	public Buffer(ByteBuffer buffer)
@@ -73,16 +78,15 @@ public class Buffer
 		return (short) (low | (high << 8));
 	}
 
-	/*public int getInt(int index)
-	{
-		int low = getShort(index) & 0xFFFF;
-		int high = getShort(index + 2) & 0xFFFF;
-		return low | (high << 16);
-	}*/
-
 	public void setByte(int index, byte value)
 	{
 		buffer.put(index, value);
+	}
+
+	public void setBytes(int index, byte[] value)
+	{
+		for (int i = 0; i < value.length; i++)
+			setByte(index + i, value[i]);
 	}
 
 	public void setByte(int index, int value)
@@ -99,5 +103,20 @@ public class Buffer
 	public byte[] array()
 	{
 		return buffer.array();
+	}
+
+	public Stream<Byte> stream()
+	{
+		return Stream
+			.iterate(0, i -> i < buffer.limit(), i -> i + 1)
+			.map(this::getByteRead);
+	}
+
+	@Override
+	public String toString()
+	{
+		return stream()
+			.map(FORMAT::toHexDigits)
+			.collect(Collectors.joining(" "));
 	}
 }
