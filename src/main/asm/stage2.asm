@@ -6,6 +6,7 @@ const_type_hello equ 1
 const_type_welcome equ 2
 const_type_read equ 3
 const_type_data equ 4
+const_type_finish equ 5
 
 const_int13_ip equ 0x13 * 4
 const_int13_cs equ const_int13_ip + 2
@@ -33,9 +34,9 @@ start:
 	xor bx, bx
 	mov es, bx
 	mov ax, [es:const_int13_ip]
-	mov [cs:var_int13_ip], ax
+	mov [var_int13_ip], ax
 	mov ax, [es:const_int13_cs]
-	mov [cs:var_int13_cs], ax
+	mov [var_int13_cs], ax
 ; Write new int13 handler
 	mov ax, irq_13
 	mov [es:const_int13_ip], ax
@@ -69,8 +70,8 @@ var_int13_cs dw 0
 ;  cl = The number of bytes to send.
 packet_start:
 ; Reset checksum
-	mov byte [cs:var_packet_c0], 0
-	mov byte [cs:var_packet_c1], 0
+	mov byte [var_packet_c0], 0
+	mov byte [var_packet_c1], 0
 ; Send packet type
 	call packet_send_byte
 ; Send packet length
@@ -80,9 +81,9 @@ packet_start:
 
 ; Ends a packet
 packet_end:
-	mov al, byte [cs:var_packet_c0]
+	mov al, byte [var_packet_c0]
 	call packet_send_byte_raw
-	mov al, byte [cs:var_packet_c1]
+	mov al, byte [var_packet_c1]
 	call packet_send_byte_raw
 	ret
 
@@ -122,13 +123,13 @@ packet_send_byte_raw:
 packet_checksum_update:
 	push ax
 ; Update C0
-	mov ah, byte [cs:var_packet_c0]
+	mov ah, byte [var_packet_c0]
 	add ah, al
 	adc ah, 0
-	mov byte [cs:var_packet_c0], ah
+	mov byte [var_packet_c0], ah
 ; Update C1
-	add byte [cs:var_packet_c1], ah
-	adc byte [cs:var_packet_c1], 0
+	add byte [var_packet_c1], ah
+	adc byte [var_packet_c1], 0
 	pop ax
 	ret
 
@@ -138,11 +139,15 @@ var_packet_c1 db 0
 
 ; Receive a packet.
 ; Returns:
-;  ax = The type of packet received.
+;  al = The type of packet received.
 packet_receive:
-	push cx
 	push di
+	push cx
+	push ax
+	push es
 ; Get pointer to packet buffer
+	mov ax, ds
+	mov es, ax
 	mov di, var_packet_buffer
 ; Store type
 	call packet_receive_byte
@@ -168,15 +173,30 @@ packet_receive:
 	stosb
 	call packet_receive_byte_raw
 	stosb
-; Print #
-	mov si, msg_hash
-	call console_print
 ; Return from function
-	pop di
+	pop es
+	pop ax
 	pop cx
+	pop di
 	ret
 
-msg_hash db "#", 0
+; Receive a packet and handle it.
+; Returns:
+;  al = The type of packet received.
+packet_receive_and_handle:
+; Receive packet
+	call packet_receive
+; Execute handler depending on type
+	cmp al, const_type_welcome
+	jne .skip1
+	call packet_handle_welcome
+.skip1:
+	cmp al, const_type_data
+	jne .skip2
+	call packet_handle_data
+.skip2:
+; Return from function
+	ret
 
 ; Receive a single byte from UART and update the checksum calculation
 ; Returns:
@@ -197,35 +217,28 @@ packet_receive_byte_raw:
 	xor al, al
 	xor dx, dx
 	int 0x14
-; Print a dot when a byte was received.
-	mov si, msg_dot
-	call console_print
 ; Return from function
 	pop dx
 	ret
-
-msg_dot db ".", 0
 
 ; Wait for a packet
 ; Parameters:
 ;  al = The type of packet to wait for
 packet_wait:
+	push ax
 	push dx
 ; Store packet type in dl
 	mov dl, al
 .loop:
-	mov si, msg_exclamation
-	call console_print
 ; Receive a packet
-	call packet_receive
+	call packet_receive_and_handle
 ; If the packet was of the wrong type, try again
 	cmp al, dl
 	jne .loop
 .endloop:
 	pop dx
+	pop ax
 	ret
-
-msg_exclamation db "!", 0
 
 ; Wait for a byte of data to be received.
 wait_for_data:
@@ -246,11 +259,60 @@ wait_for_data:
 	pop ax
 	ret
 
-; Buffer for receiving buffeR.
+; Handles the welcome packet.
+packet_handle_welcome:
+	push ax
+	push es
+; Set ES segment
+	mov ax, 0x40
+	mov es, ax
+; Modify BDA
+	mov ax, [var_welcome_disks]
+	mov [es:0x75], ax
+; Restore ES and return from function
+	pop es
+	pop ax
+	ret
+
+; Handles the data packet
+packet_handle_data:
+	push cx
+	push di
+	push si
+	push ax
+; Get number of bytes of data read
+	xor ch, ch
+	mov cl, [var_packet_length]
+; Set destination in ES:DI
+	mov di, [var_packet_data_destination]
+; Set source in DS:SI
+	mov si, var_packet_content
+; Copy all bytes
+.loop:
+	lodsb
+	stosb
+	loop .loop
+; Store the new destination
+	mov [var_packet_data_destination], di
+; Return from function
+	pop ax
+	pop si
+	pop di
+	pop cx
+	ret
+
+; Buffer for receiving buffer.
 var_packet_buffer:
 var_packet_type db 0
 var_packet_length db 0
-times 512-2 db 0
+; Packet contents
+var_packet_content:
+var_welcome_floppies:
+db 0
+var_welcome_disks:
+db 0
+; Rest of the packet
+times 258-($ - var_packet_content) db 0
 
 ; Handle requests for int 0x13
 irq_13:
@@ -264,46 +326,71 @@ irq_13:
 ; Only execute this routine if we're attempting to access the floppy drive.
 ; Otherwise we run the default routine.
 	cmp dl, 0
-	je .default
-; Store the simple information
+	jne .default
+; Backup registers
+	push ds
+	push dx
+	push cx
+	push bx
+; Store some information *before* setting the segment registers as we don't
+; want to clobber ax
 	mov [cs:var_int13_sector_count], al
-	mov [cs:var_int13_head], dh
-	mov [cs:var_int13_drive], dl
+; Set segment registers
+	mov ax, cs
+	mov ds, ax
+; Store the simple information
+	mov [var_int13_head], dh
+	mov [var_int13_drive], dl
 ; Store the sector number
 	mov al, cl
 	and al, 0b0011_1111
-	mov [cs:var_int13_sector], al
+	mov [var_int13_sector], al
 ; Store the cylinder number
 	mov ax, cx
 	mov cl, 6
 	shr ax, cl
-	mov [cs:var_int13_cylinder], ax
+	mov [var_int13_cylinder], ax
 ; Send the packet header
 	mov al, 2
 	mov cl, 6
 	call packet_start
 ; Send the packet body
 ; Drive
-	mov al, [cs:var_int13_drive]
+	mov al, [var_int13_drive]
 	call packet_send_byte
 ; Sector count
-	mov al, [cs:var_int13_sector_count]
+	mov al, [var_int13_sector_count]
 	call packet_send_byte
 ; Cylinder (low)
-	mov ax, [cs:var_int13_cylinder]
+	mov ax, [var_int13_cylinder]
 	call packet_send_byte
 ; Cylinder (high)
 	mov al, ah
 	call packet_send_byte
 ; Sector
-	mov al, [cs:var_int13_sector]
+	mov al, [var_int13_sector]
 	call packet_send_byte
 ; Head
-	mov al, [cs:var_int13_head]
+	mov al, [var_int13_head]
 	call packet_send_byte
 ; Send the packet trailer
 	call packet_end
-	jmp $
+; Set location data will be sent to
+	mov [var_packet_data_destination], bx
+; Wait for finish packet
+	mov al, const_type_finish
+	call packet_wait
+; Clear carry to indicate no error
+	clc
+; Set status to success
+	mov ah, 0
+; Set number of sectors transferred
+	mov al, [var_int13_sector_count]
+; Restore register
+	pop bx
+	pop cx
+	pop dx
+	pop ds
 	iret
 
 var_int13_sector_count db 0
@@ -311,5 +398,6 @@ var_int13_cylinder dw 0
 var_int13_sector db 0
 var_int13_head db 0
 var_int13_drive db 0
+var_packet_data_destination dw 0
 
 %include "print.asm"

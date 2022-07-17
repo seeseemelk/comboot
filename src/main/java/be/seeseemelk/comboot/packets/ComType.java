@@ -10,6 +10,7 @@ public enum ComType
 	WELCOME(2),
 	READ(3),
 	DATA(4),
+	FINISH(5),
 	;
 
 	@Getter

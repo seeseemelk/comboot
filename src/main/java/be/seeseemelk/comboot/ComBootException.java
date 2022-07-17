@@ -19,6 +19,6 @@ public class ComBootException extends RuntimeException
 	@Override
 	public String toString()
 	{
-		return "ComBootException(buffer='" + buffer + "', packet=" + packet + ")";
+		return super.toString() + ": ComBootException(buffer='" + buffer + "', packet=" + packet + ")";
 	}
 }

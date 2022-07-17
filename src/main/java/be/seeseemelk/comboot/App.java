@@ -44,17 +44,31 @@ public class App implements AutoCloseable
 
     private void handleHello(ComHello packet) throws IOException
     {
-        System.out.println("Received hello");
-        ComWelcome welcome = new ComWelcome();
+        ComWelcome welcome = ComWelcome.builder()
+                .numFloppies(1)
+                .numDisks(0)
+                .build();
         connector.write(welcome);
         System.out.println("Sent welcome");
     }
 
-    private void handleRead(ComRead packet)
+    private void handleRead(ComRead packet) throws IOException
     {
-        ComData data = new ComData();
-        //data.
-        System.out.println("Received read");
+        int bytes = packet.getSectorCount() * 512;
+        System.out.format("Reading %d bytes%n", bytes);
+        while (bytes > 0)
+        {
+            int bytesInPacket = Math.min(bytes, 32);
+            bytes -= bytesInPacket;
+
+            byte[] buffer = new byte[bytesInPacket];
+
+            ComData data = new ComData();
+            data.setData(buffer);
+            connector.write(data);
+        }
+        ComFinish finish = new ComFinish();
+        connector.write(finish);
     }
 
     @Override

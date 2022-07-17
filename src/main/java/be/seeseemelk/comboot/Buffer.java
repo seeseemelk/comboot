@@ -71,11 +71,11 @@ public class Buffer
 		return Byte.toUnsignedInt(getByteRead(index));
 	}
 
-	public short getShort(int index)
+	public int getShort(int index)
 	{
 		int low = getByte(index) & 0xFF;
 		int high = getByte(index + 1) & 0xFF;
-		return (short) (low | (high << 8));
+		return low | (high << 8);
 	}
 
 	public void setByte(int index, byte value)

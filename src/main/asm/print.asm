@@ -4,6 +4,7 @@
 ; Parameters:
 ;   si = String to print
 console_print:
+	push ax
 	push bx
 	push si
 	mov ah, 0x0e
@@ -18,4 +19,5 @@ console_print:
 	.endloop:
 	pop si
 	pop bx
+	pop ax
 	ret

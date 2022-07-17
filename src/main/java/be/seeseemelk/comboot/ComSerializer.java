@@ -46,7 +46,7 @@ public class ComSerializer
 		int expectedChecksum = calculateChecksum(buffer.skipLast(2));
 		int actualChecksum = buffer.getShort(buffer.getLength() - 2);
 		if (expectedChecksum != actualChecksum)
-			throw new ComBootException("Incorrect checksum", buffer, packet);
+			throw new ComBootException(String.format("Incorrect checksum. Expected 0x%04X, but got 0x%04X", expectedChecksum, actualChecksum), buffer, packet);
 
 		return packet;
 	}
