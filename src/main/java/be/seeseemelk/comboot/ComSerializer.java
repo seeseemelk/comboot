@@ -1,6 +1,5 @@
 package be.seeseemelk.comboot;
 
-import be.seeseemelk.comboot.Buffer;
 import be.seeseemelk.comboot.packets.ComHello;
 import be.seeseemelk.comboot.packets.ComPacket;
 import be.seeseemelk.comboot.packets.ComRead;

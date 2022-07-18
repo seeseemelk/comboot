@@ -3,17 +3,10 @@
  */
 package be.seeseemelk.comboot;
 
-import be.seeseemelk.comboot.connectors.Connector;
 import be.seeseemelk.comboot.connectors.TCPConnector;
-import be.seeseemelk.comboot.packets.*;
-import lombok.RequiredArgsConstructor;
+import be.seeseemelk.comboot.gui.ComBootGui;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.channels.SeekableByteChannel;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
 
 public class App
 {
@@ -25,7 +18,8 @@ public class App
             ComBootServer server = new ComBootServer(connector);
         )
         {
-            server.run();
+            ComBootGui gui = new ComBootGui(server);
+            gui.run();
         }
     };
 

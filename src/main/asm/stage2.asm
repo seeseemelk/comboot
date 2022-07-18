@@ -3,7 +3,7 @@
 [cpu 8086]
 
 const_type_hello equ 1
-const_type_welcome equ 2
+const_type_boot equ 2
 const_type_read equ 3
 const_type_data equ 4
 const_type_finish equ 5
@@ -45,8 +45,8 @@ start:
 ; Print waiting message
 	mov si, msg_waiting
 	call console_print
-; Wait for hello back from emulator
-	mov al, const_type_welcome
+; Wait for boot message from emulator
+	mov al, const_type_boot
 	call packet_wait
 ; Jump back to bootstrap loader
 	int 0x19
@@ -198,9 +198,9 @@ packet_receive_and_handle:
 ; Receive packet
 	call packet_receive
 ; Execute handler depending on type
-	cmp al, const_type_welcome
+	cmp al, const_type_boot
 	jne .skip1
-	call packet_handle_welcome
+	call packet_handle_boot
 .skip1:
 	cmp al, const_type_data
 	jne .skip2
@@ -270,15 +270,15 @@ wait_for_data:
 	pop ax
 	ret
 
-; Handles the welcome packet.
-packet_handle_welcome:
+; Handles the boot packet.
+packet_handle_boot:
 	push ax
 	push es
 ; Set ES segment
 	mov ax, 0x40
 	mov es, ax
 ; Modify BDA
-	mov ax, [var_welcome_disks]
+	mov ax, [var_boot_disks]
 	mov [es:0x75], ax
 ; Restore ES and return from function
 	pop es
@@ -331,7 +331,7 @@ var_packet_length db 0
 var_packet_content:
 var_welcome_floppies:
 	db 0
-var_welcome_disks:
+var_boot_disks:
 	db 0
 ; Rest of the packet
 times 258-($ - var_packet_content) db 0

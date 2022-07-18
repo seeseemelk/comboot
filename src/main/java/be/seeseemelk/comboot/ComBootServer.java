@@ -17,9 +17,12 @@ public class ComBootServer implements AutoCloseable
 {
 	private final Connector connector;
 	private SeekableByteChannel channel;
+	private boolean booted = false;
 
 	public void openFile(Path file) throws IOException
 	{
+		close();
+		System.out.format("Opening file %s%n", file);
 		channel = Files.newByteChannel(file, StandardOpenOption.READ);
 	}
 
@@ -49,13 +52,22 @@ public class ComBootServer implements AutoCloseable
 		}
 	}
 
+	public void sendBoot() throws IOException
+	{
+		if (!booted)
+		{
+			ComWelcome welcome = ComWelcome.builder()
+				.numFloppies(1)
+				.numDisks(0)
+				.build();
+			connector.write(welcome);
+			booted = true;
+		}
+	}
+
 	private void handleHello(ComHello packet) throws IOException
 	{
-		ComWelcome welcome = ComWelcome.builder()
-			.numFloppies(1)
-			.numDisks(0)
-			.build();
-		connector.write(welcome);
+		booted = false;
 		System.out.println("Sent welcome");
 	}
 
@@ -82,7 +94,7 @@ public class ComBootServer implements AutoCloseable
 	}
 
 	@Override
-	public void close() throws Exception
+	public void close() throws IOException
 	{
 		if (channel != null)
 		{
