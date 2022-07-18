@@ -9,5 +9,8 @@
 build
 bin
 
-# DIsk images
+# Disk images
 *.img
+
+# Others
+.DS_Store

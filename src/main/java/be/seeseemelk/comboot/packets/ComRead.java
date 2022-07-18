@@ -1,9 +1,15 @@
 package be.seeseemelk.comboot.packets;
 
 import be.seeseemelk.comboot.Buffer;
+import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.experimental.SuperBuilder;
 
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
+@SuperBuilder
 public class ComRead implements ComPacket
 {
 	private int drive;
@@ -38,5 +44,12 @@ public class ComRead implements ComPacket
 		cylinder = buffer.getShort(2);
 		sector = buffer.getByte(4);
 		head = buffer.getByte(5);
+	}
+
+	public int getLBA()
+	{
+		int lba = 0;
+		lba = (cylinder * 2 + head) * 18 + (sector - 1);
+		return lba;
 	}
 }

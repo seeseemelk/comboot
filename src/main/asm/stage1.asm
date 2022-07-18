@@ -42,8 +42,7 @@ start:
 ; Test if we still have retries left.
 ; If we don't we should print an error.
 .retry:
-	mov al, [var_retries]
-	test al, al
+	dec byte [var_retries]
 	jz .fail
 ; Load stage 2
 	clc
@@ -55,7 +54,7 @@ start:
 	mov dl, [var_boot_device]
 	int 0x13
 ; If an error was encountered, retry
-	jc .retry
+	jc $;.retry
 ; Jump to stage 2
 	;jmp 0x0000:0x1000
 	jmp far [cs:var_stage2_ip]

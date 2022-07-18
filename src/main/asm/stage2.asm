@@ -69,6 +69,7 @@ var_int13_cs dw 0
 ;  al = The type of packet to send.
 ;  cl = The number of bytes to send.
 packet_start:
+	push ax
 ; Reset checksum
 	mov byte [var_packet_c0], 0
 	mov byte [var_packet_c1], 0
@@ -77,6 +78,7 @@ packet_start:
 ; Send packet length
 	mov al, cl
 	call packet_send_byte
+	pop ax
 	ret
 
 ; Ends a packet
@@ -125,11 +127,18 @@ packet_checksum_update:
 ; Update C0
 	mov ah, byte [var_packet_c0]
 	add ah, al
+	adc ah, 1 ; These three instruction are just a fancy way of calculating "mod 255"
 	adc ah, 0
+	dec ah
 	mov byte [var_packet_c0], ah
 ; Update C1
-	add byte [var_packet_c1], ah
-	adc byte [var_packet_c1], 0
+	mov al, [var_packet_c1]
+	add al, ah
+	adc al, 1
+	adc al, 0
+	dec al
+	mov [var_packet_c1], al
+
 	pop ax
 	ret
 
@@ -173,11 +182,13 @@ packet_receive:
 	stosb
 	call packet_receive_byte_raw
 	stosb
-; Return from function
+; Prepare return from function
 	pop es
 	pop ax
 	pop cx
 	pop di
+; Get return value
+	mov al, [var_packet_type]
 	ret
 
 ; Receive a packet and handle it.
@@ -276,6 +287,7 @@ packet_handle_welcome:
 
 ; Handles the data packet
 packet_handle_data:
+;	call debug_dot
 	push cx
 	push di
 	push si
@@ -289,6 +301,7 @@ packet_handle_data:
 	mov si, var_packet_content
 ; Copy all bytes
 .loop:
+;	call debug_dot
 	lodsb
 	stosb
 	loop .loop
@@ -301,6 +314,15 @@ packet_handle_data:
 	pop cx
 	ret
 
+;debug_dot:
+;	push si
+;	mov si, msg_dot
+;	call console_print
+;	pop si
+;	ret
+
+msg_dot db ".", 0
+
 ; Buffer for receiving buffer.
 var_packet_buffer:
 var_packet_type db 0
@@ -308,20 +330,44 @@ var_packet_length db 0
 ; Packet contents
 var_packet_content:
 var_welcome_floppies:
-db 0
+	db 0
 var_welcome_disks:
-db 0
+	db 0
 ; Rest of the packet
 times 258-($ - var_packet_content) db 0
 
+var_execution_count db 2
+
 ; Handle requests for int 0x13
 irq_13:
-; If AH = 2, let's run our custom read routine.
+; If AH = 0 (reset), let's just run the default handler
+	cmp ah, 0
+	je .default
+; If AH = 1 (status), let's run our custom status routine.
+	cmp ah, 1
+	je .status
+; If AH = 2 (read), let's run our custom read routine.
 	cmp ah, 2
 	je .read
-; Else, run the default handler.
-.default:
-	jmp far [cs:var_int13_ip]
+; If AH = 3 (write), let's run our custom write routine.
+	cmp ah, 3
+	je .write
+; If AH = 4 (verify), let's run our custom routine.
+	cmp ah, 4
+	je .verify
+; If AH = 8 (parameters), let's run our custom routine
+	cmp ah, 8
+	je .parameters
+; If AH = 0x15 (disk type), let's run our custom routine
+	cmp ah, 0x15
+	je .disk_type
+; Any unsupported operations should panic
+	mov al, ah
+	call debug_unsupported
+.status:
+	cmp dl, 0
+	jne .default
+	call debug_unsupported
 .read:
 ; Only execute this routine if we're attempting to access the floppy drive.
 ; Otherwise we run the default routine.
@@ -332,13 +378,11 @@ irq_13:
 	push dx
 	push cx
 	push bx
-; Store some information *before* setting the segment registers as we don't
-; want to clobber ax
-	mov [cs:var_int13_sector_count], al
-; Set segment registers
-	mov ax, cs
-	mov ds, ax
+; Set segment registers without modifying AX
+	push cs
+	pop ds
 ; Store the simple information
+	mov [var_int13_sector_count], al
 	mov [var_int13_head], dh
 	mov [var_int13_drive], dl
 ; Store the sector number
@@ -346,9 +390,10 @@ irq_13:
 	and al, 0b0011_1111
 	mov [var_int13_sector], al
 ; Store the cylinder number
-	mov ax, cx
+	mov ah, cl
 	mov cl, 6
-	shr ax, cl
+	shr ah, cl
+	mov al, ch
 	mov [var_int13_cylinder], ax
 ; Send the packet header
 	mov al, 2
@@ -383,7 +428,7 @@ irq_13:
 ; Clear carry to indicate no error
 	clc
 ; Set status to success
-	mov ah, 0
+	xor ah, ah
 ; Set number of sectors transferred
 	mov al, [var_int13_sector_count]
 ; Restore register
@@ -392,6 +437,45 @@ irq_13:
 	pop dx
 	pop ds
 	iret
+.write:
+; Set result code to read protected
+	stc
+	mov ah, 0x03
+	mov al, 0
+	iret
+.verify:
+; If accessing the hard drive, run default handler
+	cmp dl, 0x80
+	jge .default
+; Set return value
+	mov ah, 0
+	clc
+	iret
+.parameters:
+; If accessing the hard drive, run default handler
+	cmp dl, 0x80
+	jge .default
+; Set return value
+	xor ax, ax
+	mov bl, 4
+	mov dh, 2
+	mov dl, 1
+	mov cx, 0x50_3F
+	clc
+	iret
+.disk_type:
+; If accessing the hard drive, run default handler
+	cmp dl, 0x80
+	jge .default
+; Set return value
+	mov ah, 1
+	mov dx, 0xb40
+	xor cx, cx
+	clc
+	iret
+; Default handler just jumps to the original handler.
+.default:
+	jmp far [cs:var_int13_ip]
 
 var_int13_sector_count db 0
 var_int13_cylinder dw 0
@@ -399,5 +483,54 @@ var_int13_sector db 0
 var_int13_head db 0
 var_int13_drive db 0
 var_packet_data_destination dw 0
+
+; Print the message 'Unsupported operation', followed by the hexadecimal
+; value of AL.
+; This function does not return.
+; Parameters:
+;  al = The value to print.
+debug_unsupported:
+	push cs
+	pop ds
+
+	mov bl, al
+	and bx, 0xF
+	mov bl, [hex_to_ascii + bx]
+	mov [msg_unsupported_low], bl
+
+	mov bl, al
+	mov cl, 4
+	shr bl, cl
+	and bx, 0xF
+	mov bl, [hex_to_ascii + bx]
+	mov [msg_unsupported_high], bl
+
+	mov si, msg_unsupported
+	call console_print
+.hang:
+	hlt
+	jmp .hang
+
+; The message "Unsupported operation"
+msg_unsupported db "Unsupported operation: "
+msg_unsupported_high db "?"
+msg_unsupported_low db "?"
+db 0xD, 0xA, 0
+
+; Lookup table to convert hex values into ascii
+hex_to_ascii db "0123456789ABCDEF"
+
+; Prints the message "!test!".
+; Useful to quickily test things.
+; This function does not return.
+debug_test:
+	mov ax, cs
+	mov ds, ax
+	mov si, msg_test
+	call console_print
+.hang:
+	hlt
+	jmp .hang
+msg_test db "!test!", 0xD, 0xA, 0
 
 %include "print.asm"

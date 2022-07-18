@@ -9,86 +9,23 @@ import be.seeseemelk.comboot.packets.*;
 import lombok.RequiredArgsConstructor;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.channels.SeekableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 
-@RequiredArgsConstructor
-public class App implements AutoCloseable
+public class App
 {
-    private final Connector connector;
-    private SeekableByteChannel channel;
-
-    public void run() throws IOException
-    {
-        channel = Files.newByteChannel(Paths.get("disk1.img"), StandardOpenOption.READ);
-        while (connector.isConnected())
-        {
-            try
-            {
-                ComPacket packet = connector.read();
-                System.out.format("Received packet: %s%n", packet);
-                switch (packet.getType())
-                {
-                    case HELLO -> handleHello((ComHello) packet);
-                    case READ -> handleRead((ComRead) packet);
-                }
-            }
-            catch (ComBootException e)
-            {
-                e.printStackTrace();
-            }
-        }
-    }
-
-    private void handleHello(ComHello packet) throws IOException
-    {
-        ComWelcome welcome = ComWelcome.builder()
-                .numFloppies(1)
-                .numDisks(0)
-                .build();
-        connector.write(welcome);
-        System.out.println("Sent welcome");
-    }
-
-    private void handleRead(ComRead packet) throws IOException
-    {
-        int bytes = packet.getSectorCount() * 512;
-        System.out.format("Reading %d bytes%n", bytes);
-        while (bytes > 0)
-        {
-            int bytesInPacket = Math.min(bytes, 32);
-            bytes -= bytesInPacket;
-
-            byte[] buffer = new byte[bytesInPacket];
-
-            ComData data = new ComData();
-            data.setData(buffer);
-            connector.write(data);
-        }
-        ComFinish finish = new ComFinish();
-        connector.write(finish);
-    }
-
-    @Override
-    public void close() throws Exception
-    {
-        if (channel != null)
-        {
-            channel.close();
-            channel = null;
-        }
-    }
 
     public static void main(String[] args) throws Exception
     {
         try (
             TCPConnector connector = connect();
-            App app = new App(connector);
+            ComBootServer server = new ComBootServer(connector);
         )
         {
-            app.run();
+            server.run();
         }
     };
 
@@ -115,3 +52,4 @@ public class App implements AutoCloseable
         }
     }
 }
+// 14 15
