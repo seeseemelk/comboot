@@ -70,7 +70,7 @@ start:
 
 %include "print.asm"
 
-msg_hello db 'cowBOOT v0.1 - by Seeseemelk', 0xD, 0xA, 0
+msg_hello db 'ComBoot v0.1 - by Seeseemelk', 0xD, 0xA, 0
 msg_error db 'Failed to load stage 2', 0xD, 0xA, 0
 var_boot_device db 0
 var_retries db 3
