@@ -2,11 +2,18 @@
 [bits 16]
 [cpu 8086]
 
+struc DriveParameter
+	dp_heads_per_track resb 1
+	dp_sectors_per_track resb 1
+	dp_num_tracks resb 1
+endstruc
+
 const_type_hello equ 1
 const_type_boot equ 2
 const_type_read equ 3
 const_type_data equ 4
 const_type_finish equ 5
+const_type_parameters equ 6
 
 const_int13_ip equ 0x13 * 4
 const_int13_cs equ const_int13_ip + 2
@@ -198,14 +205,24 @@ packet_receive_and_handle:
 ; Receive packet
 	call packet_receive
 ; Execute handler depending on type
+; If type == BOOT
 	cmp al, const_type_boot
 	jne .skip1
 	call packet_handle_boot
+	ret
 .skip1:
+; If type == DATA
 	cmp al, const_type_data
 	jne .skip2
 	call packet_handle_data
+	ret
 .skip2:
+; If type == PARAMETERS
+	cmp al, const_type_parameters
+	jne .skip3
+	call packet_handle_parameters
+	ret
+.skip3:
 ; Return from function
 	ret
 
@@ -314,6 +331,34 @@ packet_handle_data:
 	pop cx
 	ret
 
+; Handles the parameters packet
+packet_handle_parameters:
+	push bx
+	push ax
+; Check which disk we're modifying
+	mov ax, [var_parameters_disk]
+	cmp ax, 0
+	je .floppy_a
+	jmp .end
+.floppy_a:
+; We're modifying A:
+	mov bx, var_parameters_a
+; Copy values from packet to disk parameter
+;  Number of heads
+	mov ax, [var_parameters_heads_per_track]
+	mov [bx + dp_heads_per_track], ax
+;  Sectors per track
+	mov ax, [var_parameters_sectors_per_track]
+	mov [bx + dp_sectors_per_track], ax
+;  Number of tracks
+	mov ax, [var_parameters_num_tracks]
+	mov [bx + dp_num_tracks], ax
+.end:
+; Return from function
+	pop ax
+	pop bx
+	ret
+
 ;debug_dot:
 ;	push si
 ;	mov si, msg_dot
@@ -323,6 +368,9 @@ packet_handle_data:
 
 msg_dot db ".", 0
 
+var_parameters_a istruc DriveParameter
+iend
+
 ; Buffer for receiving buffer.
 var_packet_buffer:
 var_packet_type db 0
@@ -330,8 +378,14 @@ var_packet_length db 0
 ; Packet contents
 var_packet_content:
 var_welcome_floppies:
+var_parameters_disk:
 	db 0
 var_boot_disks:
+var_parameters_heads_per_track:
+	db 0
+var_parameters_sectors_per_track:
+	db 0
+var_parameters_num_tracks:
 	db 0
 ; Rest of the packet
 times 258-($ - var_packet_content) db 0

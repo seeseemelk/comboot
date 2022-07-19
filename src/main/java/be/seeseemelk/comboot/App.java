@@ -10,7 +10,6 @@ import java.io.IOException;
 
 public class App
 {
-
     public static void main(String[] args) throws Exception
     {
         try (
@@ -18,6 +17,17 @@ public class App
             ComBootServer server = new ComBootServer(connector);
         )
         {
+            if (args.length >= 1)
+            {
+                String arg = args[0];
+                if (arg.equals("--console"))
+                {
+                    server.openFile(Disks.FLOPPY_A, "disk1.img");
+                    server.setAutoBoot(true);
+                    server.run();
+                    return;
+                }
+            }
             ComBootGui gui = new ComBootGui(server);
             gui.run();
         }

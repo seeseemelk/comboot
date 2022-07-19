@@ -11,6 +11,7 @@ public enum ComType
 	READ(3),
 	DATA(4),
 	FINISH(5),
+	PARAMETERS(6),
 	;
 
 	@Getter

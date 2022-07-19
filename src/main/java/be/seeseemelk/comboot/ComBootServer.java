@@ -2,7 +2,9 @@ package be.seeseemelk.comboot;
 
 import be.seeseemelk.comboot.connectors.Connector;
 import be.seeseemelk.comboot.packets.*;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -11,24 +13,33 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.util.HashMap;
+import java.util.Map;
 
 @RequiredArgsConstructor
 public class ComBootServer implements AutoCloseable
 {
+	@Setter
+	@Getter
+	private boolean autoBoot = false;
+	private Map<Integer, DiskParameters> diskParameters = new HashMap<>();
 	private final Connector connector;
 	private SeekableByteChannel channel;
 	private boolean booted = false;
 
-	public void openFile(Path file) throws IOException
+	public void openFile(int disk, Path file) throws IOException
 	{
 		close();
 		System.out.format("Opening file %s%n", file);
+		DiskParameters parameters = DiskParameters.getDiskParametersForLength(Files.size(file));
 		channel = Files.newByteChannel(file, StandardOpenOption.READ);
+		diskParameters.put(disk, parameters);
+		sendDiskParameters(disk);
 	}
 
-	public void openFile(String file) throws IOException
+	public void openFile(int disk, String file) throws IOException
 	{
-		openFile(Paths.get(file));
+		openFile(disk, Paths.get(file));
 	}
 
 	public void run() throws IOException
@@ -61,14 +72,33 @@ public class ComBootServer implements AutoCloseable
 				.numDisks(0)
 				.build();
 			connector.write(welcome);
+			sendDiskParameters();
 			booted = true;
 		}
+	}
+
+	private void sendDiskParameters(int disk) throws IOException
+	{
+		DiskParameters parameters = diskParameters.get(disk);
+		ComParameters packet = ComParameters.builder()
+			.disk(disk)
+			.parameters(parameters)
+			.build();
+		connector.write(packet);
+	}
+
+	private void sendDiskParameters() throws IOException
+	{
+		for (int disk : diskParameters.keySet())
+			sendDiskParameters(disk);
 	}
 
 	private void handleHello(ComHello packet) throws IOException
 	{
 		booted = false;
 		System.out.println("Sent welcome");
+		if (isAutoBoot())
+			sendBoot();
 	}
 
 	private void handleRead(ComRead packet) throws IOException

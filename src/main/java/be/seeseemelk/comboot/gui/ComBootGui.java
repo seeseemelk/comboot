@@ -1,6 +1,7 @@
 package be.seeseemelk.comboot.gui;
 
 import be.seeseemelk.comboot.ComBootServer;
+import be.seeseemelk.comboot.Disks;
 
 import javax.swing.*;
 import java.awt.datatransfer.DataFlavor;
@@ -43,7 +44,7 @@ public class ComBootGui
 
 					File file = files.get(0);
 					fileLabel.setText(file.getAbsolutePath().toString());
-					server.openFile(file.toPath());
+					server.openFile(Disks.FLOPPY_A, file.toPath());
 					server.sendBoot();
 				}
 				catch (Exception e)
