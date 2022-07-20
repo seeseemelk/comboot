@@ -5,7 +5,7 @@
 struc DriveParameter
 	dp_heads_per_track resb 1
 	dp_sectors_per_track resb 1
-	dp_num_tracks resb 1
+	dp_num_tracks resb 2
 endstruc
 
 const_type_hello equ 1
@@ -101,6 +101,7 @@ packet_end:
 ;  si = Pointer to the data to send.
 ;  cl = Number of bytes to transmit.
 packet_send_data:
+	xor ch, ch
 	test cl, cl
 	jz .skiploop
 .loop:
@@ -336,8 +337,8 @@ packet_handle_parameters:
 	push bx
 	push ax
 ; Check which disk we're modifying
-	mov ax, [var_parameters_disk]
-	cmp ax, 0
+	mov al, [var_parameters_disk]
+	cmp al, 0
 	je .floppy_a
 	jmp .end
 .floppy_a:
@@ -345,11 +346,11 @@ packet_handle_parameters:
 	mov bx, var_parameters_a
 ; Copy values from packet to disk parameter
 ;  Number of heads
-	mov ax, [var_parameters_heads_per_track]
-	mov [bx + dp_heads_per_track], ax
+	mov al, [var_parameters_heads_per_track]
+	mov [bx + dp_heads_per_track], al
 ;  Sectors per track
-	mov ax, [var_parameters_sectors_per_track]
-	mov [bx + dp_sectors_per_track], ax
+	mov al, [var_parameters_sectors_per_track]
+	mov [bx + dp_sectors_per_track], al
 ;  Number of tracks
 	mov ax, [var_parameters_num_tracks]
 	mov [bx + dp_num_tracks], ax
@@ -377,7 +378,7 @@ var_packet_type db 0
 var_packet_length db 0
 ; Packet contents
 var_packet_content:
-var_welcome_floppies:
+var_boot_floppies:
 var_parameters_disk:
 	db 0
 var_boot_disks:
@@ -386,6 +387,7 @@ var_parameters_heads_per_track:
 var_parameters_sectors_per_track:
 	db 0
 var_parameters_num_tracks:
+	db 0
 	db 0
 ; Rest of the packet
 times 258-($ - var_packet_content) db 0
@@ -450,24 +452,30 @@ irq_13:
 	mov al, ch
 	mov [var_int13_cylinder], ax
 ; Calculate the LBA address
+	push bx
+	mov bx, var_parameters_a
 	call calculate_lba
+	pop bx
 ; Send the packet header
 	mov al, 2
 	mov cl, 6
+	;mov cl, 6 + 1 + 1 + 2
 	call packet_start
 ; Send drive number
 	mov al, [var_int13_drive]
 	call packet_send_byte
-; Send LBA
-	mov si, var_int13_lba
-	mov cl, 4
-	call packet_send_data
 ; Send sector count
 	mov al, [var_int13_sector_count]
 	call packet_send_byte
+; Send LBA
+	push si
+	mov si, var_int13_lba
+	mov cl, 4
+	call packet_send_data
+	pop si
 ; Send the packet trailer
 	call packet_end
-; Set location data will be sent to
+; Set location data will be written to
 	mov [var_packet_data_destination], bx
 ; Wait for finish packet
 	mov al, const_type_finish
@@ -530,9 +538,11 @@ var_int13_sector db 0
 var_int13_head db 0
 var_int13_drive db 0
 var_packet_data_destination dw 0
-var_int13_lba dq 0
+var_int13_lba db 0, 0, 0, 0
 
-; Calculates the LBA address
+; Calculates the LBA address.
+; Formula to calculate this is:
+;  lba = (cylinder * num_heads + head) * sectors_per_track + (sector - 1)
 ; Params:
 ;  CHS values stored in var_int13_*
 ;  BX = Pointer to disk geometry.
@@ -543,58 +553,72 @@ calculate_lba:
 	push bx
 	push dx
 	push cx
-; Prep AX:DX
+; Zero out AX:DX
 	xor ax, ax
 	xor dx, dx
-; Multiple cylinders by number of heads
-	mov ax, [bx + dp_]
-
-;; Load sector in AX
-;	xor ah, ah
-;	mov al, [var_int13_sector]
-;; Load cylinder BX
-;	xor bh, bh
-;	mov bl, [var_int13_cylinder]
-;; Multiply sector and cylinder.
-;	mul bx
-;; Load head in BX
-;	mov bl, [var_int13_head]
-;; Copy DX into CX for later use
-;	mov cx, dx
-;; Multiply by heads
-;	mul bx
-;; Add previous high word to current high word
-;	add dx, cx
-;; Write result out
-;	mov [var_int13_lba + 0], ax
-;	mov [var_int13_lba + 2], dx
-;; Return from function
+; Multiply cylinders by number of heads
+	mov al, [bx + dp_heads_per_track]
+	mov cx, [var_int13_cylinder]
+	mul cx
+; Add heads
+	xor ch, ch
+	mov cl, [var_int13_head]
+	call add32_16
+; Multiply by sectors per track
+	mov cl, [bx + dp_sectors_per_track]
+	call mul32_16
+; Store (sectors - 1) in cx
+	mov cl, [var_int13_sector]
+	dec cl
+; Add them together
+	call add32_16
+; Write result out
+	mov [var_int13_lba + 0], ax
+	mov [var_int13_lba + 2], dx
+; Return from function
 	pop cx
 	pop dx
 	pop bx
 	pop ax
 	ret
 
-; Calculates DX:AX = DX:AX * BX
+; Calculates DX:AX = DX:AX * CX
 ; Parameters:
 ;   DX:AX = First term
-;   BX = Second term
+;   CX = Second term
 ; Returns:
 ;   DX:AX = Result
 mul32_16:
-	xchg bx, dx
-	mul dx
-	add bx, dx
+; TODO!! Optimize
+	push cx
+; Multiply low word
+	mul cx
+	mov [var_mul_xl], ax
+	mov [var_mul_xh], dx
+; Multiply high word
+	mov ax, dx
+	mul cx
+	mov [var_mul_yl], ax
+; Add high word
+	mov dx, [var_mul_xh]
+	add dx, [var_mul_yl]
+; Load low word
+	mov ax, [var_mul_xl]
+; Return
+	pop cx
 	ret
+var_mul_xl dw 0
+var_mul_xh dw 0
+var_mul_yl dw 0
 
-; Calculates DX:AX = DX:AX + BX
+; Calculates DX:AX = DX:AX + CX
 ; Parameters:
 ;   DX:AX = First operand
-;   BX = Second operand
+;   CX = Second operand
 ; Returns:
 ;   DX:AX = Result
 add32_16:
-	add ax, bx
+	add ax, cx
 	adc dx, 0
 	ret
 

@@ -4,6 +4,7 @@ import be.seeseemelk.comboot.ComBootServer;
 import be.seeseemelk.comboot.Disks;
 
 import javax.swing.*;
+import java.awt.*;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.awt.dnd.DnDConstants;
@@ -24,6 +25,7 @@ public class ComBootGui
 		this.server = server;
 
 		frame = new JFrame("ComBoot");
+		frame.setMinimumSize(new Dimension(100, 100));
 		frame.add(fileLabel = new JLabel("Drag and drop an image file here"));
 		fileLabel.setHorizontalAlignment(JLabel.CENTER);
 		frame.setDropTarget(new DropTarget()
@@ -53,11 +55,18 @@ public class ComBootGui
 				}
 			}
 		});
+
+		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 	}
 
 	public void run() throws IOException
 	{
 		frame.setVisible(true);
 		server.run();
+	}
+
+	public void close() throws IOException
+	{
+		frame.dispose();
 	}
 }

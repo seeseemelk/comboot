@@ -21,7 +21,14 @@ public class DiskParameters
 		.sectorsPerTrack(18)
 		.build();
 
+	public static final DiskParameters DISK_PARAMETERS_360 = DiskParameters.builder()
+		.headsPerTrack(2)
+		.numberOfTracks(40)
+		.sectorsPerTrack(9)
+		.build();
+
 	public static final Set<DiskParameters> COMMON_PARAMETERS = Set.of(
+		DISK_PARAMETERS_360,
 		DISK_PARAMETERS_720,
 		DISK_PARAMETERS_1440
 	);

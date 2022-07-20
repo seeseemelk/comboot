@@ -78,6 +78,13 @@ public class Buffer
 		return low | (high << 8);
 	}
 
+	public long getInt(int index)
+	{
+		long low = getShort(index);
+		long high = getShort(index + 2);
+		return low | (high << 16L);
+	}
+
 	public void setByte(int index, byte value)
 	{
 		buffer.put(index, value);
@@ -94,10 +101,16 @@ public class Buffer
 		setByte(index, (byte) value);
 	}
 
-	public void setShort(int index, short value)
+	public void setShort(int index, int value)
 	{
 		setByte(index, (byte) (value & 0xFF));
 		setByte(index + 1, (byte) (value >> 8));
+	}
+
+	public void setInt(int index, int value)
+	{
+		setShort(index, (int) (value & 0xFFFF));
+		setShort(index + 2, (int) ((value >> 16) & 0xFFFF));
 	}
 
 	public byte[] array()

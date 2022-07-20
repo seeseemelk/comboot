@@ -12,6 +12,7 @@ public class App
 {
     public static void main(String[] args) throws Exception
     {
+        ComBootGui gui = null;
         try (
             TCPConnector connector = connect();
             ComBootServer server = new ComBootServer(connector);
@@ -28,8 +29,13 @@ public class App
                     return;
                 }
             }
-            ComBootGui gui = new ComBootGui(server);
+            gui = new ComBootGui(server);
             gui.run();
+        }
+        finally
+        {
+            if (gui != null)
+                gui.close();
         }
     };
 

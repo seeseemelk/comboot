@@ -71,8 +71,9 @@ public class ComBootServer implements AutoCloseable
 				.numFloppies(1)
 				.numDisks(0)
 				.build();
-			connector.write(welcome);
 			sendDiskParameters();
+			System.out.println("Sending boot request");
+			connector.write(welcome);
 			booted = true;
 		}
 	}
@@ -84,6 +85,7 @@ public class ComBootServer implements AutoCloseable
 			.disk(disk)
 			.parameters(parameters)
 			.build();
+		System.out.format("Sending drive parameters for disk %d: %s%n", disk, packet);
 		connector.write(packet);
 	}
 
@@ -103,10 +105,10 @@ public class ComBootServer implements AutoCloseable
 
 	private void handleRead(ComRead packet) throws IOException
 	{
-		int position = packet.getLBA() * 512;
+		long position = packet.getLba() * 512;
 		channel.position(position);
 		int bytes = packet.getSectorCount() * 512;
-		System.out.format("Reading %d bytes at 0x%04X%n", bytes, position);
+		System.out.format("Reading %d bytes at 0x%08X%n", bytes, position);
 		while (bytes > 0)
 		{
 			int bytesInPacket = Math.min(bytes, 64);
