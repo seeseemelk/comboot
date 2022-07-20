@@ -32,8 +32,8 @@ public class TCPConnector implements Connector, AutoCloseable
 	public Buffer receive() throws IOException
 	{
 		Buffer buffer = new Buffer(256 + 4);
-		byte type = readByte();
-		byte length = readByte();
+		int type = readByte();
+		int length = readByte();
 		buffer.setByte(0, type);
 		buffer.setByte(1, length);
 		for (int i = 0; i < length; i++)
@@ -44,7 +44,7 @@ public class TCPConnector implements Connector, AutoCloseable
 		return buffer.takeFirst(length + 4);
 	}
 
-	public byte readByte() throws IOException
+	public int readByte() throws IOException
 	{
 		int value = inputStream.read();
 		if (value == -1)
@@ -52,7 +52,7 @@ public class TCPConnector implements Connector, AutoCloseable
 			closed = true;
 			throw new IOException("Closed");
 		}
-		return (byte) value;
+		return value;
 	}
 
 	@Override

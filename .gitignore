@@ -14,3 +14,4 @@ bin
 
 # Others
 .DS_Store
+*.bak

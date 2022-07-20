@@ -14,6 +14,7 @@ const_type_read equ 3
 const_type_data equ 4
 const_type_finish equ 5
 const_type_parameters equ 6
+const_type_write equ 7
 
 const_int13_ip equ 0x13 * 4
 const_int13_cs equ const_int13_ip + 2
@@ -90,10 +91,12 @@ packet_start:
 
 ; Ends a packet
 packet_end:
+	push ax
 	mov al, byte [var_packet_c0]
 	call packet_send_byte_raw
 	mov al, byte [var_packet_c1]
 	call packet_send_byte_raw
+	pop ax
 	ret
 
 ; Sends packet data.
@@ -434,32 +437,18 @@ irq_13:
 	push dx
 	push cx
 	push bx
+	push si
 ; Set segment registers without modifying AX
 	push cs
 	pop ds
-; Store the simple information
-	mov [var_int13_sector_count], al
-	mov [var_int13_head], dh
-	mov [var_int13_drive], dl
-; Store the sector number
-	mov al, cl
-	and al, 0b0011_1111
-	mov [var_int13_sector], al
-; Store the cylinder number
-	mov ah, cl
-	mov cl, 6
-	shr ah, cl
-	mov al, ch
-	mov [var_int13_cylinder], ax
+; Store location data will be written to
+	mov [var_packet_data_destination], bx
 ; Calculate the LBA address
-	push bx
 	mov bx, var_parameters_a
 	call calculate_lba
-	pop bx
 ; Send the packet header
 	mov al, 2
 	mov cl, 6
-	;mov cl, 6 + 1 + 1 + 2
 	call packet_start
 ; Send drive number
 	mov al, [var_int13_drive]
@@ -468,15 +457,11 @@ irq_13:
 	mov al, [var_int13_sector_count]
 	call packet_send_byte
 ; Send LBA
-	push si
 	mov si, var_int13_lba
 	mov cl, 4
 	call packet_send_data
-	pop si
 ; Send the packet trailer
 	call packet_end
-; Set location data will be written to
-	mov [var_packet_data_destination], bx
 ; Wait for finish packet
 	mov al, const_type_finish
 	call packet_wait
@@ -487,12 +472,84 @@ irq_13:
 ; Set number of sectors transferred
 	mov al, [var_int13_sector_count]
 ; Restore register
+	pop si
 	pop bx
 	pop cx
 	pop dx
 	pop ds
 	iret
 .write:
+; Backup registers
+	push ds
+	push dx
+	push cx
+	push bx
+	push si
+; Set segment registers
+	push cs
+	pop ds
+; Store location data will be read from
+	mov [var_packet_data_destination], bx
+; Calculate the LBA address
+	mov bx, var_parameters_a
+	call calculate_lba
+; Send write packet
+	mov al, const_type_write
+	mov cl, 6
+	call packet_start
+; Send drive number
+	mov al, [var_int13_drive]
+	call packet_send_byte
+; Send sector count
+	mov al, [var_int13_sector_count]
+	call packet_send_byte
+; Send LBA
+	mov si, var_int13_lba
+	mov cl, 4
+	call packet_send_data
+; Send packet trailer
+	call packet_end
+; Number of blocks to transfer is in AL
+; Number of 128-byte blocks should be in DX.
+	xor dh, dh
+	mov dl, [var_int13_sector_count]
+; Shift left twice in order to multiply by 4 (from 512-byte blocks to 128-byte blocks)
+	shl dx, 1
+	shl dx, 1
+; Load target address into BX again
+	mov bx, [var_packet_data_destination]
+.send_block:
+; Send a block of data
+; Send header
+	mov al, const_type_data
+	mov cl, 128
+	call packet_start
+; Send 128 bytes of data
+	mov cx, 128
+.send_byte:
+	mov al, [es:bx]
+	inc bx
+	call packet_send_byte
+	loop .send_byte
+.end_send_byte:
+; Send trailer
+	call packet_end
+; Check if more blocks need to be sent
+	dec dx
+	jnz .send_block
+.end_send_block:
+; Send finish packet
+	mov al, const_type_finish
+	xor cl, cl
+	call packet_start
+	call packet_end
+; Restore registers
+	pop si
+	pop bx
+	pop cx
+	pop dx
+	pop ds
+	iret
 ; Set result code to read protected
 	stc
 	mov ah, 0x03
@@ -544,7 +601,7 @@ var_int13_lba db 0, 0, 0, 0
 ; Formula to calculate this is:
 ;  lba = (cylinder * num_heads + head) * sectors_per_track + (sector - 1)
 ; Params:
-;  CHS values stored in var_int13_*
+;  AL, CH, CL, DH, DL = contains CHS address.
 ;  BX = Pointer to disk geometry.
 ; Returns:
 ;  LBA value stored in var_int13_lba
@@ -553,6 +610,22 @@ calculate_lba:
 	push bx
 	push dx
 	push cx
+
+; Store the simple information
+	mov [var_int13_sector_count], al
+	mov [var_int13_head], dh
+	mov [var_int13_drive], dl
+; Store the sector number
+	mov al, cl
+	and al, 0b0011_1111
+	mov [var_int13_sector], al
+; Store the cylinder number
+	mov ah, cl
+	mov cl, 6
+	shr ah, cl
+	mov al, ch
+	mov [var_int13_cylinder], ax
+
 ; Zero out AX:DX
 	xor ax, ax
 	xor dx, dx

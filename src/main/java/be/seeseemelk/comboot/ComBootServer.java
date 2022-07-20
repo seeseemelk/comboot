@@ -9,10 +9,8 @@ import lombok.Setter;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SeekableByteChannel;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -22,19 +20,25 @@ public class ComBootServer implements AutoCloseable
 	@Setter
 	@Getter
 	private boolean autoBoot = false;
-	private Map<Integer, DiskParameters> diskParameters = new HashMap<>();
+	private Map<Integer, Disk> disks = new HashMap<>();
 	private final Connector connector;
-	private SeekableByteChannel channel;
 	private boolean booted = false;
+	private Disk writingDisk = null;
+
+	public void setDisk(int id, Disk disk)
+	{
+		disk.setId(id);
+		disks.put(id, disk);
+	}
+
+	public Disk getDisk(int id)
+	{
+		return disks.get(id);
+	}
 
 	public void openFile(int disk, Path file) throws IOException
 	{
-		close();
-		System.out.format("Opening file %s%n", file);
-		DiskParameters parameters = DiskParameters.getDiskParametersForLength(Files.size(file));
-		channel = Files.newByteChannel(file, StandardOpenOption.READ);
-		diskParameters.put(disk, parameters);
-		sendDiskParameters(disk);
+		setDisk(disk, Disk.openFile(file));
 	}
 
 	public void openFile(int disk, String file) throws IOException
@@ -54,6 +58,8 @@ public class ComBootServer implements AutoCloseable
 				{
 				case HELLO -> handleHello((ComHello) packet);
 				case READ -> handleRead((ComRead) packet);
+				case WRITE -> handleWrite((ComWrite) packet);
+				case DATA -> handleData((ComData) packet);
 				}
 			}
 			catch (ComBootException e)
@@ -78,20 +84,20 @@ public class ComBootServer implements AutoCloseable
 		}
 	}
 
-	private void sendDiskParameters(int disk) throws IOException
+	private void sendDiskParameters(Disk disk) throws IOException
 	{
-		DiskParameters parameters = diskParameters.get(disk);
+		DiskParameters parameters = disk.getParameters();
 		ComParameters packet = ComParameters.builder()
-			.disk(disk)
+			.disk(disk.getId())
 			.parameters(parameters)
 			.build();
-		System.out.format("Sending drive parameters for disk %d: %s%n", disk, packet);
+		System.out.format("Sending drive parameters for disk %d: %s%n", disk.getId(), packet);
 		connector.write(packet);
 	}
 
 	private void sendDiskParameters() throws IOException
 	{
-		for (int disk : diskParameters.keySet())
+		for (Disk disk : disks.values())
 			sendDiskParameters(disk);
 	}
 
@@ -106,6 +112,7 @@ public class ComBootServer implements AutoCloseable
 	private void handleRead(ComRead packet) throws IOException
 	{
 		long position = packet.getLba() * 512;
+		SeekableByteChannel channel = getDisk(packet.getDisk()).getChannel();
 		channel.position(position);
 		int bytes = packet.getSectorCount() * 512;
 		System.out.format("Reading %d bytes at 0x%08X%n", bytes, position);
@@ -125,13 +132,26 @@ public class ComBootServer implements AutoCloseable
 		connector.write(finish);
 	}
 
+	private void handleWrite(ComWrite packet) throws IOException
+	{
+		writingDisk = getDisk(packet.getDisk());
+		writingDisk.getChannel().position(packet.getLba() * 512);
+	}
+
+	private void handleData(ComData packet) throws IOException
+	{
+		if (writingDisk != null)
+		{
+			byte[] data = packet.getData();
+			ByteBuffer buffer = ByteBuffer.wrap(data);
+			writingDisk.getChannel().write(buffer);
+		}
+	}
+
 	@Override
 	public void close() throws IOException
 	{
-		if (channel != null)
-		{
-			channel.close();
-			channel = null;
-		}
+		for (Disk disk : disks.values())
+			disk.close();
 	}
 }

@@ -12,6 +12,7 @@ public enum ComType
 	DATA(4),
 	FINISH(5),
 	PARAMETERS(6),
+	WRITE(7),
 	;
 
 	@Getter

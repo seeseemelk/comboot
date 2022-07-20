@@ -1,8 +1,6 @@
 package be.seeseemelk.comboot;
 
-import be.seeseemelk.comboot.packets.ComHello;
-import be.seeseemelk.comboot.packets.ComPacket;
-import be.seeseemelk.comboot.packets.ComRead;
+import be.seeseemelk.comboot.packets.*;
 import lombok.experimental.UtilityClass;
 
 @UtilityClass
@@ -26,17 +24,14 @@ public class ComSerializer
 	{
 		ComPacket packet;
 		int type = buffer.getByte(0);
-		switch (type)
-		{
-		case 1:
-			packet = new ComHello();
-			break;
-		case 2:
-			packet = new ComRead();
-			break;
-		default:
-			throw new ComBootException(String.format("Invalid ComPacket type: %d", type), buffer, null);
-		}
+		packet = switch (type)
+			{
+				case 1 -> new ComHello();
+				case 2 -> new ComRead();
+				case 4 -> new ComData();
+				case 7 -> new ComWrite();
+				default -> throw new ComBootException(String.format("Invalid ComPacket type: %d", type), buffer, null);
+			};
 		int length = buffer.getByte(1);
 		if (length == buffer.skipLast(2).getLength())
 			throw new ComBootException("Buffer badly sized", buffer, packet);

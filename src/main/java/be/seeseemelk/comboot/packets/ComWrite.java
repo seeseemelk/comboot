@@ -10,7 +10,7 @@ import lombok.experimental.SuperBuilder;
 @NoArgsConstructor
 @AllArgsConstructor
 @SuperBuilder
-public class ComRead implements ComPacket
+public class ComWrite implements ComPacket
 {
 	private int disk;
 	private int sectorCount;
@@ -19,7 +19,7 @@ public class ComRead implements ComPacket
 	@Override
 	public ComType getType()
 	{
-		return ComType.READ;
+		return ComType.WRITE;
 	}
 
 	@Override
