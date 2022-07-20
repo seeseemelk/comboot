@@ -449,28 +449,21 @@ irq_13:
 	shr ah, cl
 	mov al, ch
 	mov [var_int13_cylinder], ax
+; Calculate the LBA address
+	call calculate_lba
 ; Send the packet header
 	mov al, 2
 	mov cl, 6
 	call packet_start
-; Send the packet body
-; Drive
+; Send drive number
 	mov al, [var_int13_drive]
 	call packet_send_byte
-; Sector count
+; Send LBA
+	mov si, var_int13_lba
+	mov cl, 4
+	call packet_send_data
+; Send sector count
 	mov al, [var_int13_sector_count]
-	call packet_send_byte
-; Cylinder (low)
-	mov ax, [var_int13_cylinder]
-	call packet_send_byte
-; Cylinder (high)
-	mov al, ah
-	call packet_send_byte
-; Sector
-	mov al, [var_int13_sector]
-	call packet_send_byte
-; Head
-	mov al, [var_int13_head]
 	call packet_send_byte
 ; Send the packet trailer
 	call packet_end
@@ -537,6 +530,73 @@ var_int13_sector db 0
 var_int13_head db 0
 var_int13_drive db 0
 var_packet_data_destination dw 0
+var_int13_lba dq 0
+
+; Calculates the LBA address
+; Params:
+;  CHS values stored in var_int13_*
+;  BX = Pointer to disk geometry.
+; Returns:
+;  LBA value stored in var_int13_lba
+calculate_lba:
+	push ax
+	push bx
+	push dx
+	push cx
+; Prep AX:DX
+	xor ax, ax
+	xor dx, dx
+; Multiple cylinders by number of heads
+	mov ax, [bx + dp_]
+
+;; Load sector in AX
+;	xor ah, ah
+;	mov al, [var_int13_sector]
+;; Load cylinder BX
+;	xor bh, bh
+;	mov bl, [var_int13_cylinder]
+;; Multiply sector and cylinder.
+;	mul bx
+;; Load head in BX
+;	mov bl, [var_int13_head]
+;; Copy DX into CX for later use
+;	mov cx, dx
+;; Multiply by heads
+;	mul bx
+;; Add previous high word to current high word
+;	add dx, cx
+;; Write result out
+;	mov [var_int13_lba + 0], ax
+;	mov [var_int13_lba + 2], dx
+;; Return from function
+	pop cx
+	pop dx
+	pop bx
+	pop ax
+	ret
+
+; Calculates DX:AX = DX:AX * BX
+; Parameters:
+;   DX:AX = First term
+;   BX = Second term
+; Returns:
+;   DX:AX = Result
+mul32_16:
+	xchg bx, dx
+	mul dx
+	add bx, dx
+	ret
+
+; Calculates DX:AX = DX:AX + BX
+; Parameters:
+;   DX:AX = First operand
+;   BX = Second operand
+; Returns:
+;   DX:AX = Result
+add32_16:
+	add ax, bx
+	adc dx, 0
+	ret
 
 ; Print the message 'Unsupported operation', followed by the hexadecimal
 ; value of AL.
