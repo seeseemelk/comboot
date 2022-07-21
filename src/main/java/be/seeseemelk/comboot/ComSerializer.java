@@ -29,6 +29,7 @@ public class ComSerializer
 				case 1 -> new ComHello();
 				case 2 -> new ComRead();
 				case 4 -> new ComData();
+				case 5 -> new ComFinish();
 				case 7 -> new ComWrite();
 				default -> throw new ComBootException(String.format("Invalid ComPacket type: %d", type), buffer, null);
 			};

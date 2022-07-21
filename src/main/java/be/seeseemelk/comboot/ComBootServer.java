@@ -60,6 +60,7 @@ public class ComBootServer implements AutoCloseable
 				case READ -> handleRead((ComRead) packet);
 				case WRITE -> handleWrite((ComWrite) packet);
 				case DATA -> handleData((ComData) packet);
+				case FINISH -> {}
 				}
 			}
 			catch (ComBootException e)
@@ -134,8 +135,12 @@ public class ComBootServer implements AutoCloseable
 
 	private void handleWrite(ComWrite packet) throws IOException
 	{
+		long position = packet.getLba() * 512;
+		int bytes = packet.getSectorCount() * 512;
+		System.out.format("Writing %d bytes at 0x%08X%n", bytes, position);
+
 		writingDisk = getDisk(packet.getDisk());
-		writingDisk.getChannel().position(packet.getLba() * 512);
+		writingDisk.getChannel().position(position);
 	}
 
 	private void handleData(ComData packet) throws IOException

@@ -495,7 +495,8 @@ irq_13:
 	call calculate_lba
 ; Send write packet
 	mov al, const_type_write
-	mov cl, 6
+	;mov cl, 6
+	mov cl, 6 + 2 + 1 + 1
 	call packet_start
 ; Send drive number
 	mov al, [var_int13_drive]
@@ -507,6 +508,15 @@ irq_13:
 	mov si, var_int13_lba
 	mov cl, 4
 	call packet_send_data
+; DEBUG - Send CHS
+	mov al, [var_int13_cylinder + 0]
+	call packet_send_byte
+	mov al, [var_int13_cylinder + 1]
+	call packet_send_byte
+	mov al, [var_int13_head]
+	call packet_send_byte
+	mov al, [var_int13_sector]
+	call packet_send_byte
 ; Send packet trailer
 	call packet_end
 ; Number of blocks to transfer is in AL
@@ -549,6 +559,10 @@ irq_13:
 	pop cx
 	pop dx
 	pop ds
+; Set results
+	mov al, [var_int13_sector_count]
+	xor ah, ah
+	clc
 	iret
 ; Set result code to read protected
 	stc
@@ -620,9 +634,10 @@ calculate_lba:
 	and al, 0b0011_1111
 	mov [var_int13_sector], al
 ; Store the cylinder number
-	mov ah, cl
-	mov cl, 6
-	shr ah, cl
+	;mov ah, cl
+	;mov cl, 6
+	;shr ah, cl
+	xor ah, ah
 	mov al, ch
 	mov [var_int13_cylinder], ax
 
