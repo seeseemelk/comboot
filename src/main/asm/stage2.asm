@@ -3,6 +3,7 @@
 [cpu 8086]
 
 struc DriveParameter
+	dp_drive resb 0
 	dp_heads_per_track resb 1
 	dp_sectors_per_track resb 1
 	dp_num_tracks resb 2
@@ -338,28 +339,28 @@ packet_handle_data:
 ; Handles the parameters packet
 packet_handle_parameters:
 	push bx
-	push ax
-; Check which disk we're modifying
-	mov al, [var_parameters_disk]
-	cmp al, 0
-	je .floppy_a
-	jmp .end
-.floppy_a:
-; We're modifying A:
-	mov bx, var_parameters_a
+	push dx
+; Get the disk parameters for the modified drive.
+	mov dl, [var_parameters_disk]
+	call drive_get_dp_struct
+; If invalid, just jump to the end
+	test bx, bx
+	jz .end
+; Mark the disk as virtual
+	;mov byte [bx + dp_drive], 0xFF
 ; Copy values from packet to disk parameter
 ;  Number of heads
-	mov al, [var_parameters_heads_per_track]
-	mov [bx + dp_heads_per_track], al
+	mov dl, [var_parameters_heads_per_track]
+	mov [bx + dp_heads_per_track], dl
 ;  Sectors per track
-	mov al, [var_parameters_sectors_per_track]
-	mov [bx + dp_sectors_per_track], al
+	mov dl, [var_parameters_sectors_per_track]
+	mov [bx + dp_sectors_per_track], dl
 ;  Number of tracks
-	mov ax, [var_parameters_num_tracks]
-	mov [bx + dp_num_tracks], ax
+	mov dx, [var_parameters_num_tracks]
+	mov [bx + dp_num_tracks], dx
 .end:
 ; Return from function
-	pop ax
+	pop dx
 	pop bx
 	ret
 
@@ -372,8 +373,102 @@ packet_handle_parameters:
 
 msg_dot db ".", 0
 
-var_parameters_a istruc DriveParameter
+var_dp_a istruc DriveParameter
+	at dp_drive, db 0xff
 iend
+var_dp_b istruc DriveParameter
+	at dp_drive, db 1
+iend
+var_dp_c istruc DriveParameter
+	at dp_drive, db 0x80
+iend
+
+; Gets the DP struct for a drive.
+; Parameters:
+;  dl = Drive number
+; Returns:
+;  bx = Pointer to drive struct.
+drive_get_dp_struct:
+	cmp dl, 0
+	je .drive_a
+	cmp dl, 1
+	je .drive_b
+	cmp dl, 0x80
+	je .drive_c
+; No drive found
+	xor bx, bx
+	ret
+.drive_a:
+	mov bx, var_dp_a
+	ret
+.drive_b:
+	mov bx, var_dp_b
+	ret
+.drive_c:
+	mov bx, var_dp_c
+	ret
+
+; Converts a drive id into an original drive id.
+; Parameters:
+;  dl = The drive number
+; Returns:
+;  dl = The converted drive number
+drive_convert_id:
+	push bx
+; Get the drive parameters.
+	call drive_get_dp_struct
+; Get the target drive.
+	mov dl, [bx + dp_drive]
+; Return from function
+	pop bx
+	ret
+
+; Tests if a drive is a real drive.
+; Parameters:
+;  dl = Drive number
+; Returns:
+;  dl = if real, the converted drive number.
+;       if virtual, the original value.
+;  cf set if real
+;  cf unset if virtual
+drive_is_real:
+; Prepare segment registers
+	push ds
+	push cs
+	pop ds
+; Test if drive number is one that could be virtual
+	cmp dl, 0
+	je .possible
+	cmp dl, 1
+	je .possible
+	cmp dl, 0x80
+	je .possible
+; Else it is definitly real
+	jmp .real
+; It could be virtual, needs more definite test
+.possible:
+; Get the target drive
+	push dx
+	call drive_convert_id
+; If it is 0xFF, it is emulated.
+	cmp dl, 0xFF
+	je .pop_virtual
+; Else, adjust the stack to compensate for the DX value that was pushed.
+	add sp, 2
+; It is real
+.real:
+	stc
+	jmp .return
+.pop_virtual:
+; Pop the orifinal value off again.
+	pop dx
+; It is virtual
+.virtual:
+	clc
+; Return from function
+.return:
+	pop ds
+	ret
 
 ; Buffer for receiving buffer.
 var_packet_buffer:
@@ -433,14 +528,14 @@ irq_13:
 	mov al, ah
 	call debug_unsupported
 .status:
-	cmp dl, 0
-	jne .default
+; If the drive is real, we should run the default handler.
+	call drive_is_real
+	jc .default
 	call debug_unsupported
 .read:
-; Only execute this routine if we're attempting to access the floppy drive.
-; Otherwise we run the default routine.
-	cmp dl, 0
-	jne .default
+; If the drive is real, we should run the default handler.
+	call drive_is_real
+	jc .default
 ; Backup registers
 	push ds
 	push dx
@@ -453,7 +548,7 @@ irq_13:
 ; Store location data will be written to
 	mov [var_packet_data_destination], bx
 ; Calculate the LBA address
-	mov bx, var_parameters_a
+	call drive_get_dp_struct
 	call calculate_lba
 ; Send the packet header
 	mov al, 2
@@ -488,6 +583,9 @@ irq_13:
 	pop ds
 	iret
 .write:
+; If the drive is real, we should run the default handler.
+	call drive_is_real
+	jc .default
 ; Backup registers
 	push ds
 	push dx
@@ -500,7 +598,7 @@ irq_13:
 ; Store location data will be read from
 	mov [var_packet_data_destination], bx
 ; Calculate the LBA address
-	mov bx, var_parameters_a
+	call drive_get_dp_struct
 	call calculate_lba
 ; Send write packet
 	mov al, const_type_write
@@ -579,26 +677,26 @@ irq_13:
 	mov al, 0
 	iret
 .verify:
-; If accessing the hard drive, run default handler
-	cmp dl, 0x80
-	jge .default
+; If the drive is real, run the default handler.
+	call drive_is_real
+	jc .default
 ; Set return value
 	mov ah, 0
 	clc
 	iret
 .format:
-; If not our drive, run default handler
-	cmp dl, 0
-	jne .default
+; If the drive is real, run the default handler.
+	call drive_is_real
+	jc .default
 ; Otherwise, succeed
 ; Set result
 	clc
 	xor ah, ah
 	iret
 .parameters:
-; If accessing the hard drive, run default handler
-	cmp dl, 0x80
-	jge .default
+; If the drive is real, run the default handler.
+	call drive_is_real
+	jc .default
 ; Set return value
 	xor ax, ax
 	mov bl, 4
@@ -608,9 +706,9 @@ irq_13:
 	clc
 	iret
 .disk_type:
-; If accessing the hard drive, run default handler
-	cmp dl, 0x80
-	jge .default
+; If the drive is real, run the default handler.
+	call drive_is_real
+	jc .default
 ; Set return value
 	mov ah, 1
 	mov dx, 0xb40
@@ -628,6 +726,8 @@ var_int13_head db 0
 var_int13_drive db 0
 var_packet_data_destination dw 0
 var_int13_lba db 0, 0, 0, 0
+
+
 
 ; Calculates the LBA address.
 ; Formula to calculate this is:
