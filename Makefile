@@ -19,7 +19,6 @@ clean:
 emulate: $(IMAGE)
 	qemu-system-i386 -drive file=$(IMAGE),if=floppy,format=raw -serial tcp::4444,server -gdb tcp::1234,server
 
-
 $(IMAGE): $(STAGE1) $(STAGE2)
 	cp $(STAGE1) $(IMAGE)
 

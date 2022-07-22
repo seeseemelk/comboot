@@ -24,6 +24,7 @@ public class App
                 if (arg.equals("--console"))
                 {
                     server.openFile(Disks.FLOPPY_A, "disk1.img");
+                    //server.openFile(Disks.FLOPPY_A, "bin/asm/test.img");
                     server.setAutoBoot(true);
                     server.run();
                     return;

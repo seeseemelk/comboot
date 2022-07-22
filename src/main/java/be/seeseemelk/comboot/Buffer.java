@@ -11,9 +11,23 @@ public class Buffer
 
 	private final ByteBuffer buffer;
 
+	private final int offset;
+	private final int length;
+
+	public Buffer(ByteBuffer buffer, int offset, int length)
+	{
+		if (offset < 0 || offset >= buffer.limit())
+			throw new IllegalArgumentException("Invalid offset");
+		if (length < 0 || offset + length > buffer.limit())
+			throw new IllegalArgumentException("Invalid length");
+		this.buffer = buffer;
+		this.offset = offset;
+		this.length = length;
+	}
+
 	public Buffer(ByteBuffer buffer)
 	{
-		this.buffer = buffer;
+		this(buffer, 0, buffer.limit());
 	}
 
 	public Buffer(byte[] buffer)
@@ -28,12 +42,12 @@ public class Buffer
 
 	public int getLength()
 	{
-		return buffer.limit();
+		return length;
 	}
 
 	public Buffer sliceLen(int index, int length)
 	{
-		return new Buffer(buffer.slice(index, length));
+		return new Buffer(buffer, index + offset, length);
 	}
 
 	public Buffer slicePos(int index, int endIndex)
@@ -61,14 +75,14 @@ public class Buffer
 		return slicePos(0, bytes);
 	}
 
-	public byte getByteRead(int index)
-	{
-		return buffer.get(index);
-	}
-
 	public int getByte(int index)
 	{
-		return Byte.toUnsignedInt(getByteRead(index));
+		return Byte.toUnsignedInt(buffer.get(index + offset));
+	}
+
+	public byte getByteAsByte(int index)
+	{
+		return (byte) getByte(index);
 	}
 
 	public int getShort(int index)
@@ -87,7 +101,7 @@ public class Buffer
 
 	public void setByte(int index, byte value)
 	{
-		buffer.put(index, value);
+		buffer.put(index + offset, value);
 	}
 
 	public void setBytes(int index, byte[] value)
@@ -121,8 +135,8 @@ public class Buffer
 	public Stream<Byte> stream()
 	{
 		return Stream
-			.iterate(0, i -> i < buffer.limit(), i -> i + 1)
-			.map(this::getByteRead);
+			.iterate(0, i -> i < length, i -> i + 1)
+			.map(this::getByteAsByte);
 	}
 
 	@Override
@@ -131,5 +145,17 @@ public class Buffer
 		return stream()
 			.map(FORMAT::toHexDigits)
 			.collect(Collectors.joining(" "));
+	}
+
+	public byte[] getBytes(byte[] destination, int start, int length)
+	{
+		for (int write = 0; write < length; write++)
+			destination[write] = getByteAsByte(write + start);
+		return destination;
+	}
+
+	public byte[] getBytes(int start, int length)
+	{
+		return getBytes(new byte[length], start, length);
 	}
 }

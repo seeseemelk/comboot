@@ -414,12 +414,21 @@ irq_13:
 ; If AH = 4 (verify), let's run our custom routine.
 	cmp ah, 4
 	je .verify
+; If AH = 5 (format), let's run our costum routine.
+	cmp ah, 5
+	je .format
 ; If AH = 8 (parameters), let's run our custom routine
 	cmp ah, 8
 	je .parameters
 ; If AH = 0x15 (disk type), let's run our custom routine
 	cmp ah, 0x15
 	je .disk_type
+; If AH = 0x17 (media type for format, floppy), let's just run the default routine
+	cmp ah, 0x17
+	je .default
+; If AH = 0x18 (media type for format), let's just run the default routine
+	cmp ah, 0x18
+	je .default
 ; Any unsupported operations should panic
 	mov al, ah
 	call debug_unsupported
@@ -576,6 +585,15 @@ irq_13:
 ; Set return value
 	mov ah, 0
 	clc
+	iret
+.format:
+; If not our drive, run default handler
+	cmp dl, 0
+	jne .default
+; Otherwise, succeed
+; Set result
+	clc
+	xor ah, ah
 	iret
 .parameters:
 ; If accessing the hard drive, run default handler
