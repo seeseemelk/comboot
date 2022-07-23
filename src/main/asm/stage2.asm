@@ -3,7 +3,7 @@
 [cpu 8086]
 
 struc DriveParameter
-	dp_drive resb 0
+	dp_drive resb 1
 	dp_heads_per_track resb 1
 	dp_sectors_per_track resb 1
 	dp_num_tracks resb 2
@@ -343,11 +343,11 @@ packet_handle_parameters:
 ; Get the disk parameters for the modified drive.
 	mov dl, [var_parameters_disk]
 	call drive_get_dp_struct
-; If invalid, just jump to the end
+; If null, just jump to the end
 	test bx, bx
 	jz .end
 ; Mark the disk as virtual
-	;mov byte [bx + dp_drive], 0xFF
+	mov byte [bx + dp_drive], 0xFF
 ; Copy values from packet to disk parameter
 ;  Number of heads
 	mov dl, [var_parameters_heads_per_track]
@@ -371,10 +371,10 @@ packet_handle_parameters:
 ;	pop si
 ;	ret
 
-msg_dot db ".", 0
+;msg_dot db ".", 0
 
 var_dp_a istruc DriveParameter
-	at dp_drive, db 0xff
+	at dp_drive, db 0
 iend
 var_dp_b istruc DriveParameter
 	at dp_drive, db 1
@@ -418,7 +418,7 @@ drive_convert_id:
 ; Get the drive parameters.
 	call drive_get_dp_struct
 ; Get the target drive.
-	mov dl, [bx + dp_drive]
+	mov dl, [cs:bx + dp_drive]
 ; Return from function
 	pop bx
 	ret
@@ -432,10 +432,6 @@ drive_convert_id:
 ;  cf set if real
 ;  cf unset if virtual
 drive_is_real:
-; Prepare segment registers
-	push ds
-	push cs
-	pop ds
 ; Test if drive number is one that could be virtual
 	cmp dl, 0
 	je .possible
@@ -460,14 +456,13 @@ drive_is_real:
 	stc
 	jmp .return
 .pop_virtual:
-; Pop the orifinal value off again.
+; Pop the original value off again.
 	pop dx
 ; It is virtual
 .virtual:
 	clc
 ; Return from function
 .return:
-	pop ds
 	ret
 
 ; Buffer for receiving buffer.
@@ -490,11 +485,9 @@ var_parameters_num_tracks:
 ; Rest of the packet
 times 258-($ - var_packet_content) db 0
 
-var_execution_count db 2
-
 ; Handle requests for int 0x13
 irq_13:
-; If AH = 0 (reset), let's just run the default handler
+; If AH = 0 (reset), let's just our custom reset routine
 	cmp ah, 0
 	je .default
 ; If AH = 1 (status), let's run our custom status routine.
@@ -527,6 +520,14 @@ irq_13:
 ; Any unsupported operations should panic
 	mov al, ah
 	call debug_unsupported
+.reset:
+; If the drive is real, we should run the default handler.
+	call drive_is_real
+	jc .default
+; Virtual drive -> return success code
+	xor ah, ah
+	clc
+	iret
 .status:
 ; If the drive is real, we should run the default handler.
 	call drive_is_real
@@ -697,21 +698,55 @@ irq_13:
 ; If the drive is real, run the default handler.
 	call drive_is_real
 	jc .default
+; Backup registers
+	push ds
+	mov [.parameters_bh], bh
+; Set segment registers
+	push cs
+	pop ds
+; Get pointer to drive parameters
+	call drive_get_dp_struct
 ; Set return value
-	xor ax, ax
-	mov bl, 4
-	mov dh, 2
+;  Low eight bytes of cylinder count
+	mov ch, [bx + dp_num_tracks]
+;  Sectors per track.
+;  TODO - include high two bits of cylinder counter
+	mov cl, [bx + dp_sectors_per_track]
+;  Heads per cylinder
+	mov dh, [bx + dp_heads_per_track]
+;  Number of drives
+;  TODO - properly calculate this
 	mov dl, 1
-	mov cx, 0x50_3F
+
+; 4 means 1.44M drive
+	mov bl, 4
+; Set AX to 0 to indicate success
+	xor ax, ax
 	clc
+; Restore registers
+	mov bh, [.parameters_bh]
+	pop ds
 	iret
+.parameters_bh db 0
 .disk_type:
 ; If the drive is real, run the default handler.
 	call drive_is_real
 	jc .default
-; Set return value
+; Hard drives should use the hard drive handler.
+	cmp dl, 0x80
+	jge .hdd
+.floppy:
+; Set results for a floppy drive.
 	mov ah, 1
-	mov dx, 0xb40
+	xor dx, dx
+	xor cx, cx
+	clc
+	iret
+.hdd:
+; Set result for a HDD.
+	mov ah, 3
+; TODO - Return number of sectors
+	xor dx, dx
 	xor cx, cx
 	clc
 	iret
@@ -726,8 +761,6 @@ var_int13_head db 0
 var_int13_drive db 0
 var_packet_data_destination dw 0
 var_int13_lba db 0, 0, 0, 0
-
-
 
 ; Calculates the LBA address.
 ; Formula to calculate this is:
@@ -855,10 +888,45 @@ debug_unsupported:
 	hlt
 	jmp .hang
 
+log:
+	push ds
+	push bx
+	push cx
+	push si
+
+	push cs
+	pop ds
+
+	mov bl, al
+	and bx, 0xF
+	mov bl, [hex_to_ascii + bx]
+	mov [msg_log_low], bl
+
+	mov bl, al
+	mov cl, 4
+	shr bl, cl
+	and bx, 0xF
+	mov bl, [hex_to_ascii + bx]
+	mov [msg_log_high], bl
+
+	mov si, msg_log
+	call console_print
+
+	pop si
+	pop cx
+	pop bx
+	pop ds
+	ret
+
 ; The message "Unsupported operation"
 msg_unsupported db "Unsupported operation: "
 msg_unsupported_high db "?"
 msg_unsupported_low db "?"
+db 0xD, 0xA, 0
+
+msg_log db "Log: "
+msg_log_high db "?"
+msg_log_low db "?"
 db 0xD, 0xA, 0
 
 ; Lookup table to convert hex values into ascii
