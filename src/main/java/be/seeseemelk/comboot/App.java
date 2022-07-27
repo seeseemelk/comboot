@@ -12,7 +12,9 @@ public class App
 {
     public static void main(String[] args) throws Exception
     {
-        ComBootGui gui = null;
+        ComBootGui gui = new ComBootGui();
+
+        /*ComBootGui gui = null;
         try (
             TCPConnector connector = connect();
             ComBootServer server = new ComBootServer(connector);
@@ -37,7 +39,7 @@ public class App
         {
             if (gui != null)
                 gui.close();
-        }
+        }*/
     };
 
     private static TCPConnector connect() throws IOException

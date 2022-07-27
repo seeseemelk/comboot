@@ -10,8 +10,8 @@ entry:
 ; START OF CONFIGURATION
 serial_port db 0
 stage2_sector db 2
-stage2_count equ (stage2_end - stage2_start - 1) / 512 + 1
-stage2_pages equ (stage2_count - 1) / 2 + 1
+stage2_sector_count equ (stage2_end - stage2_start - 1) / 512 + 1
+stage2_pages equ (stage2_sector_count - 1) / 2 + 1
 ; END OF CONFIGURATION
 
 ; Proper start of stage 1.
@@ -47,7 +47,7 @@ start:
 ; Load stage 2
 	clc
 	mov ah, 2
-	mov al, stage2_count
+	mov al, stage2_sector_count
 	mov ch, 0
 	mov cl, [stage2_sector]
 	mov dh, 0

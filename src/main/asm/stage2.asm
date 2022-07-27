@@ -17,6 +17,9 @@ const_type_finish equ 5
 const_type_parameters equ 6
 const_type_write equ 7
 
+const_dp_virtual equ 0xFE
+const_dp_not_present equ 0xFF
+
 const_int13_ip equ 0x13 * 4
 const_int13_cs equ const_int13_ip + 2
 
@@ -347,7 +350,7 @@ packet_handle_parameters:
 	test bx, bx
 	jz .end
 ; Mark the disk as virtual
-	mov byte [bx + dp_drive], 0xFF
+	mov byte [bx + dp_drive], const_dp_virtual
 ; Copy values from packet to disk parameter
 ;  Number of heads
 	mov dl, [var_parameters_heads_per_track]
@@ -382,6 +385,9 @@ iend
 var_dp_c istruc DriveParameter
 	at dp_drive, db 0x80
 iend
+var_dp_d istruc DriveParameter
+	at dp_drive, db 0x81
+iend
 
 ; Gets the DP struct for a drive.
 ; Parameters:
@@ -395,6 +401,8 @@ drive_get_dp_struct:
 	je .drive_b
 	cmp dl, 0x80
 	je .drive_c
+	cmp dl, 0x81
+	je .drive_d
 ; No drive found
 	xor bx, bx
 	ret
@@ -406,6 +414,9 @@ drive_get_dp_struct:
 	ret
 .drive_c:
 	mov bx, var_dp_c
+	ret
+.drive_d:
+	mov bx, var_dp_d
 	ret
 
 ; Converts a drive id into an original drive id.
@@ -447,7 +458,7 @@ drive_is_real:
 	push dx
 	call drive_convert_id
 ; If it is 0xFF, it is emulated.
-	cmp dl, 0xFF
+	cmp dl, const_dp_virtual
 	je .pop_virtual
 ; Else, adjust the stack to compensate for the DX value that was pushed.
 	add sp, 2
@@ -464,6 +475,60 @@ drive_is_real:
 ; Return from function
 .return:
 	ret
+
+; Gets the number of floppy drives present - both virtual and real.
+; Returns:
+;  dl = The number of floppy drives present.
+count_floppies:
+; Prepare DL
+	xor dl, dl
+; Test for drive A:
+	cmp byte [var_dp_a + dp_drive], const_dp_not_present
+	je .skip_a
+	inc dl
+.skip_a:
+; Test for drive B:
+	cmp byte [var_dp_b + dp_drive], const_dp_not_present
+	je .skip_b
+	inc dl
+.skip_b:
+; Return from function
+	ret
+
+; Gets the number of hard drives present - both virtual and real.
+; Returns:
+;  dl = The number of hard drives present.
+count_hdd:
+; Prepare DL
+	xor dl, dl
+; Test for drive C:
+	cmp byte [var_dp_c + dp_drive], const_dp_not_present
+	je .skip_c
+	inc dl
+.skip_c:
+; Test for drive D:
+	cmp byte [var_dp_d + dp_drive], const_dp_not_present
+	je .skip_d
+	inc dl
+.skip_d:
+; Return from function
+	ret
+
+; Counts the number of drives of a specific type.
+; Parameters:
+;  dl(bit 7) = set if counting hard drives, clear if counting floppies.
+; Returns:
+;  dl = The number of hard drives present.
+count_drives:
+; Test if the bit is set
+	test dl, 0x80
+	jz .clear
+.set:
+; When set, count hard drives
+	jmp count_hdd
+.clear:
+; When clear, count floppies
+	jmp count_floppies
 
 ; Buffer for receiving buffer.
 var_packet_buffer:
@@ -715,8 +780,7 @@ irq_13:
 ;  Heads per cylinder
 	mov dh, [bx + dp_heads_per_track]
 ;  Number of drives
-;  TODO - properly calculate this
-	mov dl, 1
+	call count_drives
 
 ; 4 means 1.44M drive
 	mov bl, 4
