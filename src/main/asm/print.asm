@@ -10,13 +10,13 @@ console_print:
 	mov ah, 0x0e
 	mov bl, 0x02
 	cld
-	.loop:
-		lodsb
-		test al, al
-		jz .endloop
-		int 0x10
-		jmp .loop
-	.endloop:
+.loop:
+	lodsb
+	test al, al
+	jz .endloop
+	int 0x10
+	jmp .loop
+.endloop:
 	pop si
 	pop bx
 	pop ax

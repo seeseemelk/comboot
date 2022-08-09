@@ -56,7 +56,6 @@ start:
 ; If an error was encountered, retry
 	jc .retry
 ; Jump to stage 2
-	;jmp 0x0000:0x1000
 	jmp far [cs:var_stage2_ip]
 ; Print an error message if an error was encountered
 .fail:
