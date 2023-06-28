@@ -1,3 +1,6 @@
+# This repository has moved to GitLab
+Please visit https://gitlab.com/seeseemelk/comboot
+
 # comboot
 A tool for booting old x86 PCs from serial
 
